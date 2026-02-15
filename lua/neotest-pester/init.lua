@@ -1,9 +1,9 @@
 ---@return neotest.Adapter
 local function create_adapter()
-  local dotnet_utils = require("neotest-pester.dotnet_utils")
+  -- local dotnet_utils = require("neotest-pester.dotnet_utils")
   local config = require("neotest-pester.config").get_config()
-  dotnet_utils.add_opts(config.build_opts or {})
 
+  --- TODO: (Derek Lomax) Sat 14 Feb 2026 11:10:37 PM MST, get DAP working
   --- @type dap.Configuration
   local dap_settings = vim.tbl_extend("force", {
     type = "netcoredbg",
@@ -15,9 +15,6 @@ local function create_adapter()
     justMyCode = false,
   }, config.dap_settings or {})
 
-  local solution
-  local solution_dir
-
   ---@package
   ---@type neotest.Adapter
   ---@diagnostic disable-next-line: missing-fields
@@ -28,75 +25,17 @@ local function create_adapter()
     local lib = require("neotest.lib")
     local logger = require("neotest.logging")
 
-    if solution_dir then
-      return solution_dir
-    end
-
-    local first_solution = lib.files.match_root_pattern("*.sln", "*.slnx")(path)
-
-    --- Only select solution files not in hidden directories or based on user filter
-    --- @type fun(search_path: string): boolean
-    local ignore_function = config.discovery_directory_filter
-      or function(search_path)
-        return search_path:match("/%.")
-      end
-
-    local solutions = vim.fs.find(function(name, search_path)
-      return name:match("%.slnx?$") and not ignore_function(search_path)
-    end, {
-      upward = false,
-      type = "file",
-      path = first_solution or path,
-      limit = math.huge,
-    })
-
-    logger.info(string.format("neotest-pester: scanning %s for solution file...", first_solution))
-    logger.info(solutions)
-
-    solution = config.solution_selector and config.solution_selector(solutions) or nil
-
-    if not solution and vim.g.roslyn_nvim_selected_solution then
-      solution = vim.g.roslyn_nvim_selected_solution
-      logger.info(string.format("neotest-pester: using solution from roslyn.nvim %s", solution))
-    end
-
-    if solution or #solutions > 0 then
-      local solution_future = nio.control.future()
-
-      if solution then
-        solution_future.set(solution)
-      else
-        if #solutions == 1 then
-          solution = solutions[1]
-          solution_future.set(solution)
-        else
-          vim.ui.select(solutions, {
-            prompt = "Multiple solutions exists. Select a solution file: ",
-            format_item = function(item)
-              return vim.fs.basename(item)
-            end,
-          }, function(selected)
-            nio.run(function()
-              if selected then
-                solution = selected
-                solution_dir = vim.fs.dirname(selected)
-              end
-              logger.info(string.format("neotest-pester: selected solution file %s", selected))
-              solution_future.set(solution)
-            end)
-          end)
-        end
-      end
-
-      if solution_future.wait() and solution then
-        dotnet_utils.build_path(solution)
-        dotnet_utils.get_solution_info(solution)
-        solution = string.gsub(solution, "/", lib.files.sep)
-        solution_dir = string.gsub(vim.fs.dirname(solution), "/", lib.files.sep)
-        logger.info(string.format("neotest-pester: found solution dir %s", solution_dir))
-        return solution_dir
-      end
-    end
+    -- TODO: (Derek Lomax) Sat 14 Feb 2026 11:11:47 PM MST, get root path to search
+    -- local solutions = vim.fs.find(function(name, search_path)
+    --   return name:match("%.slnx?$") and not ignore_function(search_path)
+    -- end, {
+    --   upward = false,
+    --   type = "file",
+    --   path = first_solution or path,
+    --   limit = math.huge,
+    -- })
+    -- logger.info(string.format("neotest-pester: scanning %s for solution file...", first_solution))
+    -- logger.info(solutions)
 
     logger.info(string.format("neotest-pester: no solution file found in %s", path))
     return lib.files.match_root_pattern(".git")(path) or path
@@ -114,8 +53,8 @@ local function create_adapter()
       return false
     end
 
-    local project = dotnet_utils.get_proj_info(file_path)
-    local client = client_discovery.get_client_for_project(project, solution)
+    -- local client = client_discovery.get_client_for_project(project, solution)
+    local client = TestClient:new(project, client)
 
     if not client then
       logger.debug(

@@ -22,7 +22,7 @@ source = {
 
 build = {
   type = "builtin",
-  copy_directories = {
-    "scripts",
-  },
+  -- copy_directories = {
+  --   "scripts",
+  -- },
 }
