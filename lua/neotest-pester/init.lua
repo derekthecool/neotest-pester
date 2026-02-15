@@ -108,7 +108,7 @@ local function create_adapter()
 
     logger.trace("neotest-pester: checking if file is test file: " .. file_path)
 
-    local isPowershellFile = (vim.endswith(file_path, ".Tests.ps1")
+    local isPowershellFile = (vim.endswith(file_path, ".Tests.ps1"))
 
     if not isPowershellFile then
       return false
