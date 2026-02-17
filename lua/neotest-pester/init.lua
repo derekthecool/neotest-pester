@@ -2,7 +2,7 @@
 
 ---@return neotest.Adapter
 local function create_adapter()
-  -- local dotnet_utils = require("neotest-pester.dotnet_utils")
+  local dotnet_utils = require("neotest-pester.dotnet_utils")
   local config = require("neotest-pester.config").get_config()
 
   --- TODO: (Derek Lomax) Sat 14 Feb 2026 11:10:37 PM MST, get DAP working
