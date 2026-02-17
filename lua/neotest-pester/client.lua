@@ -1,6 +1,5 @@
 local nio = require("nio")
 local logger = require("neotest.logging")
-local mtp_client = require("neotest-pester.mtp")
 local pester_client = require("neotest-pester.pester")
 local dotnet_utils = require("neotest-pester.dotnet_utils")
 local files = require("neotest-pester.files")
@@ -28,36 +27,34 @@ end
 
 function TestClient:discover_tests(path)
   self.semaphore.acquire()
-
-  local last_modified
-
+  logger.debug("neotest-pester: not sure what to do here")
   local test_cases = self.sub_client.test_cases or {}
 
-  if self.last_discovered == nil then
-    last_modified = dotnet_utils.get_project_last_modified(self.project)
-    self.last_discovered = last_modified or 0
-    test_cases = self.sub_client:discover_tests()
-  else
-    if path then
-      last_modified = files.get_path_last_modified(path)
-    else
-      last_modified = dotnet_utils.get_project_last_modified(self.project)
-    end
-
-    if last_modified and last_modified > self.last_discovered then
-      logger.debug(
-        "neotest-pester: Discovering tests: "
-          .. " last modified at "
-          .. last_modified
-          .. " last discovered at "
-          .. self.last_discovered
-      )
-      dotnet_utils.build_project(self.project)
-      last_modified = dotnet_utils.get_project_last_modified(self.project)
-      self.last_discovered = last_modified or 0
-      test_cases = self.sub_client:discover_tests()
-    end
-  end
+  -- if self.last_discovered == nil then
+  --   last_modified = dotnet_utils.get_project_last_modified(self.project)
+  --   self.last_discovered = last_modified or 0
+  --   test_cases = self.sub_client:discover_tests()
+  -- else
+  --   if path then
+  --     last_modified = files.get_path_last_modified(path)
+  --   else
+  --     last_modified = dotnet_utils.get_project_last_modified(self.project)
+  --   end
+  --
+  --   if last_modified and last_modified > self.last_discovered then
+  --     logger.debug(
+  --       "neotest-pester: Discovering tests: "
+  --         .. " last modified at "
+  --         .. last_modified
+  --         .. " last discovered at "
+  --         .. self.last_discovered
+  --     )
+  --     dotnet_utils.build_project(self.project)
+  --     last_modified = dotnet_utils.get_project_last_modified(self.project)
+  --     self.last_discovered = last_modified or 0
+  --     test_cases = self.sub_client:discover_tests()
+  --   end
+  -- end
 
   self.semaphore.release()
 
@@ -95,56 +92,56 @@ function client_discovery.get_client_for_project(project, solution)
     return clients[project.proj_file] or nil
   end
 
-  -- Check if the project is part of a solution.
-  -- If not then do not create a client.
-  local solution_projects = solution and dotnet_utils.get_solution_info(solution)
-  if solution_projects and #solution_projects.projects > 0 then
-    local exists_in_solution = vim.iter(solution_projects.projects):any(function(solution_project)
-      return solution_project == project
-    end)
-
-    if not exists_in_solution then
-      logger.debug(
-        "neotest-pester: project is not part of the solution projects: "
-          .. vim.inspect(solution_projects.projects)
-          .. ", project: "
-          .. vim.inspect(project)
-      )
-      clients[project.proj_file] = false
-      return
-    end
-  else
-    logger.debug(
-      "neotest-pester: no solution projects found for solution: " .. vim.inspect(solution)
-    )
-  end
-
-  ---@type neotest-pester.wrapper-client
-  local client
-
-  -- Project is part of a solution or standalone, create a client.
-  if project.is_mtp_project then
-    logger.debug(
-      "neotest-pester: Creating mtp client for project "
-        .. project.proj_file
-        .. " and "
-        .. project.dll_file
-    )
-    client = mtp_client:new(project)
-  elseif project.is_test_project then
-    client = pester_client:new(project)
-  else
-    logger.warn(
-      "neotest-pester: Project is neither test project nor mtp project, returning nil client for "
-        .. project.proj_file
-    )
-    clients[project.proj_file] = false
-    return
-  end
-
-  client = TestClient:new(project, client)
-
-  clients[project.proj_file] = client
+  -- -- Check if the project is part of a solution.
+  -- -- If not then do not create a client.
+  -- local solution_projects = solution and dotnet_utils.get_solution_info(solution)
+  -- if solution_projects and #solution_projects.projects > 0 then
+  --   local exists_in_solution = vim.iter(solution_projects.projects):any(function(solution_project)
+  --     return solution_project == project
+  --   end)
+  --
+  --   if not exists_in_solution then
+  --     logger.debug(
+  --       "neotest-pester: project is not part of the solution projects: "
+  --         .. vim.inspect(solution_projects.projects)
+  --         .. ", project: "
+  --         .. vim.inspect(project)
+  --     )
+  --     clients[project.proj_file] = false
+  --     return
+  --   end
+  -- else
+  --   logger.debug(
+  --     "neotest-pester: no solution projects found for solution: " .. vim.inspect(solution)
+  --   )
+  -- end
+  --
+  -- ---@type neotest-pester.wrapper-client
+  -- local client
+  --
+  -- -- -- Project is part of a solution or standalone, create a client.
+  -- -- if project.is_mtp_project then
+  -- --   logger.debug(
+  -- --     "neotest-pester: Creating mtp client for project "
+  -- --       .. project.proj_file
+  -- --       .. " and "
+  -- --       .. project.dll_file
+  -- --   )
+  -- --   -- client = mtp_client:new(project)
+  -- -- elseif project.is_test_project then
+  -- --   client = pester_client:new(project)
+  -- -- else
+  -- --   logger.warn(
+  -- --     "neotest-pester: Project is neither test project nor mtp project, returning nil client for "
+  -- --       .. project.proj_file
+  -- --   )
+  -- --   clients[project.proj_file] = false
+  -- --   return
+  -- -- end
+  --
+  -- client = TestClient:new(project, client)
+  --
+  -- clients[project.proj_file] = client
   return client
 end
 
