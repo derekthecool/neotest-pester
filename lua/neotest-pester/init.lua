@@ -307,93 +307,95 @@ local function create_adapter()
     -- end
 
     local filetype = "ps1"
-    local tests_in_file = client:discover_tests_for_path(file_path)
-
-    if not tests_in_file or next(tests_in_file) == nil then
-      logger.debug(string.format("neotest-pester: no tests found for file %s", file_path))
-      return
-    end
-
     local tree
-
-    if tests_in_file then
-      local content = lib.files.read(file_path)
-      tests_in_file = nio.fn.deepcopy(tests_in_file)
-      local lang_tree =
-        vim.treesitter.get_string_parser(content, filetype, { injections = { [filetype] = "" } })
-
-      local root = lang_tree:parse(false)[1]:root()
-
-      local query =
-        lib.treesitter.normalise_query(filetype, require("neotest-pester.queries.powershell"))
-
-      local sep = lib.files.sep
-      local path_elems = vim.split(file_path, sep, { plain = true })
-      local nodes = {
-        {
-          type = "file",
-          path = file_path,
-          name = path_elems[#path_elems],
-          range = { root:range() },
-        },
-      }
-      for _, match in query:iter_matches(root, content, nil, nil, { all = false }) do
-        local captured_nodes = {}
-        for i, capture in ipairs(query.captures) do
-          captured_nodes[capture] = match[i]
-        end
-        local res = build_position(content, captured_nodes, tests_in_file, file_path)
-        if res then
-          for _, pos in ipairs(res) do
-            nodes[#nodes + 1] = pos
-          end
-        end
-      end
-
-      -- add tests which does not have a matching tree-sitter node.
-      for id, test in pairs(tests_in_file) do
-        local line = test.LineNumber or 0
-        nodes[#nodes + 1] = {
-          id = id,
-          type = "test",
-          path = file_path,
-          name = test.DisplayName,
-          range = { line - 1, 0, line - 1, -1 },
-        }
-      end
-
-      for _, node in ipairs(nodes) do
-        node.project = project
-      end
-
-      if #nodes <= 1 then
-        return {}
-      end
-
-      local structure = assert(build_structure(nodes, {}, {
-        nested_tests = false,
-        require_namespaces = false,
-        position_id = function(position, parents)
-          return position.id
-            or vim
-              .iter({
-                position.path,
-                vim.tbl_map(function(pos)
-                  return pos.name
-                end, parents),
-                position.name,
-              })
-              :flatten()
-              :join("::")
-        end,
-      }))
-
-      tree = types.Tree.from_list(structure, function(pos)
-        return pos.id
-      end)
-    end
-
-    logger.info(string.format("neotest-pester: done scanning %s for tests", file_path))
+    -- local client = client_discovery:TestClient:new()
+    -- local tests_in_file = client:discover_tests_for_path(file_path)
+    --
+    -- if not tests_in_file or next(tests_in_file) == nil then
+    --   logger.debug(string.format("neotest-pester: no tests found for file %s", file_path))
+    --   return
+    -- end
+    --
+    -- local tree
+    --
+    -- if tests_in_file then
+    --   local content = lib.files.read(file_path)
+    --   tests_in_file = nio.fn.deepcopy(tests_in_file)
+    --   local lang_tree =
+    --     vim.treesitter.get_string_parser(content, filetype, { injections = { [filetype] = "" } })
+    --
+    --   local root = lang_tree:parse(false)[1]:root()
+    --
+    --   local query =
+    --     lib.treesitter.normalise_query(filetype, require("neotest-pester.queries.powershell"))
+    --
+    --   local sep = lib.files.sep
+    --   local path_elems = vim.split(file_path, sep, { plain = true })
+    --   local nodes = {
+    --     {
+    --       type = "file",
+    --       path = file_path,
+    --       name = path_elems[#path_elems],
+    --       range = { root:range() },
+    --     },
+    --   }
+    --   for _, match in query:iter_matches(root, content, nil, nil, { all = false }) do
+    --     local captured_nodes = {}
+    --     for i, capture in ipairs(query.captures) do
+    --       captured_nodes[capture] = match[i]
+    --     end
+    --     local res = build_position(content, captured_nodes, tests_in_file, file_path)
+    --     if res then
+    --       for _, pos in ipairs(res) do
+    --         nodes[#nodes + 1] = pos
+    --       end
+    --     end
+    --   end
+    --
+    --   -- add tests which does not have a matching tree-sitter node.
+    --   for id, test in pairs(tests_in_file) do
+    --     local line = test.LineNumber or 0
+    --     nodes[#nodes + 1] = {
+    --       id = id,
+    --       type = "test",
+    --       path = file_path,
+    --       name = test.DisplayName,
+    --       range = { line - 1, 0, line - 1, -1 },
+    --     }
+    --   end
+    --
+    --   for _, node in ipairs(nodes) do
+    --     node.project = project
+    --   end
+    --
+    --   if #nodes <= 1 then
+    --     return {}
+    --   end
+    --
+    --   local structure = assert(build_structure(nodes, {}, {
+    --     nested_tests = false,
+    --     require_namespaces = false,
+    --     position_id = function(position, parents)
+    --       return position.id
+    --         or vim
+    --           .iter({
+    --             position.path,
+    --             vim.tbl_map(function(pos)
+    --               return pos.name
+    --             end, parents),
+    --             position.name,
+    --           })
+    --           :flatten()
+    --           :join("::")
+    --     end,
+    --   }))
+    --
+    --   tree = types.Tree.from_list(structure, function(pos)
+    --     return pos.id
+    --   end)
+    -- end
+    --
+    -- logger.info(string.format("neotest-pester: done scanning %s for tests", file_path))
 
     return tree
   end
