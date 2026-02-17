@@ -20,17 +20,18 @@ end
 function Client:new(project)
   local config = require("neotest-pester.config").get_config()
   logger.info("neotest-pester: Creating new (pester) client for: " .. vim.inspect(project))
-  local findSettings = function()
-    local settings = nil
-    if config.settings_selector then
-      settings = config.settings_selector(project.proj_dir)
-    end
-    if settings ~= nil then
-      return settings
-    else
-      return pester_client.find_runsettings_for_project(project.proj_dir)
-    end
-  end
+  -- local findSettings = function()
+  --   local settings = nil
+  --   if config.settings_selector then
+  --     settings = config.settings_selector(project.proj_dir)
+  --   end
+  --   if settings ~= nil then
+  --     return settings
+  --   else
+  --     return pester_client.find_runsettings_for_project(project.proj_dir)
+  --   end
+  -- end
+
   local client = {
     project = project,
     test_cases = {},
