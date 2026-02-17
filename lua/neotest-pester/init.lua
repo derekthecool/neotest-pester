@@ -1,3 +1,5 @@
+-- This plugin must implement the neotest interface: https://github.com/nvim-neotest/neotest/blob/master/lua/neotest/adapters/interface.lua
+
 ---@return neotest.Adapter
 local function create_adapter()
   -- local dotnet_utils = require("neotest-pester.dotnet_utils")
@@ -20,64 +22,26 @@ local function create_adapter()
   ---@diagnostic disable-next-line: missing-fields
   local PesterNeotestAdapter = { name = "neotest-pester" }
 
-  function PesterNeotestAdapter.root(path)
-    local nio = require("nio")
+  -- NOTE: Required for implementing neotest interface
+  ---Find the project root directory given a current directory to work from.
+  ---Should no root be found, the adapter can still be used in a non-project context if a test file matches.
+  ---@async
+  ---@param dir string @Directory to treat as cwd
+  ---@return string | nil @Absolute root dir of test suite
+  function PesterNeotestAdapter.root(dir)
+    -- Powershell does not really have the idea of a project root
+    -- perhaps a .psd1 file, but it's not safe to assume there even is a module
     local lib = require("neotest.lib")
-    local logger = require("neotest.logging")
-
-    -- TODO: (Derek Lomax) Sat 14 Feb 2026 11:11:47 PM MST, get root path to search
-    -- local solutions = vim.fs.find(function(name, search_path)
-    --   return name:match("%.slnx?$") and not ignore_function(search_path)
-    -- end, {
-    --   upward = false,
-    --   type = "file",
-    --   path = first_solution or path,
-    --   limit = math.huge,
-    -- })
-    -- logger.info(string.format("neotest-pester: scanning %s for solution file...", first_solution))
-    -- logger.info(solutions)
-
-    logger.info(string.format("neotest-pester: no solution file found in %s", path))
-    return lib.files.match_root_pattern(".git")(path) or path
+    return lib.files.match_root_pattern(".git")(dir) or dir
   end
 
-  function PesterNeotestAdapter.is_test_file(file_path)
-    local logger = require("neotest.logging")
-    local client_discovery = require("neotest-pester.client")
-
-    logger.trace("neotest-pester: checking if file is test file: " .. file_path)
-
-    local isPowershellFile = (vim.endswith(file_path, ".Tests.ps1"))
-
-    if not isPowershellFile then
-      return false
-    end
-
-    -- local client = client_discovery.get_client_for_project(project, solution)
-    local client = TestClient:new(project, client)
-
-    if not client then
-      logger.debug(
-        "neotest-pester: marking file as non-test file since no client was found: " .. file_path
-      )
-      return false
-    end
-
-    local tests_in_file = client:discover_tests_for_path(file_path)
-
-    if not tests_in_file or next(tests_in_file) == nil then
-      logger.debug(
-        string.format(
-          "neotest-pester: marking file as non-test file since no tests was found in file %s",
-          file_path
-        )
-      )
-      return false
-    end
-
-    return true
-  end
-
+  -- NOTE: Required for implementing neotest interface
+  ---Filter directories when searching for test files
+  ---@async
+  ---@param name string Name of directory
+  ---@param rel_path string Path to directory, relative to root
+  ---@param root string Root directory of project
+  ---@return boolean
   function PesterNeotestAdapter.filter_dir(name, rel_path, root)
     local logger = require("neotest.logging")
     logger.trace("neotest-pester: filtering dir", name, rel_path, root)
@@ -86,39 +50,46 @@ local function create_adapter()
       return false
     end
 
-    -- Filter out directories that are not part of the solution (if there is a solution)
-    local fullpath = vim.fs.joinpath(root, rel_path)
-    if solution_dir then
-      local solution_info = dotnet_utils.get_solution_info(solution)
+    return true
+  end
 
-      local is_project_reachable = vim
-        .iter(solution_info and solution_info.projects or {})
-        :map(function(proj)
-          return vim.fs.dirname(proj.proj_file)
-        end)
-        :any(function(project_dir)
-          -- path should be a subdir of a solution project
-          -- or the solution project should be a subdir of the path
-          return vim.fs.relpath(project_dir, fullpath) ~= nil
-            or vim.fs.relpath(fullpath, project_dir) ~= nil
-        end)
-      if not is_project_reachable then
-        logger.debug(
-          string.format(
-            "neotest-pester: file '%s' is not a part of the solution '%s'",
-            rel_path,
-            solution_info.solution_file
-          )
-        )
-      end
-      return is_project_reachable
-    else
-      if config.discovery_directory_filter then
-        return config.discovery_directory_filter(fullpath)
-      else
-        return true
-      end
+  -- NOTE: Required for implementing neotest interface
+  ---@async
+  ---@param file_path string
+  ---@return boolean
+  function PesterNeotestAdapter.is_test_file(file_path)
+    local logger = require("neotest.logging")
+    local client_discovery = require("neotest-pester.client")
+    logger.debug("neotest-pester: checking if file is test file: " .. file_path)
+    local isPowershellFile = (vim.endswith(file_path, ".Tests.ps1"))
+
+    if not isPowershellFile then
+      return false
     end
+
+    -- -- local client = client_discovery.get_client_for_project(project, solution)
+    -- local client = TestClient:new(project, client)
+    --
+    -- if not client then
+    --   logger.debug(
+    --     "neotest-pester: marking file as non-test file since no client was found: " .. file_path
+    --   )
+    --   return false
+    -- end
+    --
+    -- local tests_in_file = client:discover_tests_for_path(file_path)
+    --
+    -- if not tests_in_file or next(tests_in_file) == nil then
+    --   logger.debug(
+    --     string.format(
+    --       "neotest-pester: marking file as non-test file since no tests was found in file %s",
+    --       file_path
+    --     )
+    --   )
+    --   return false
+    -- end
+
+    return true
   end
 
   local function get_match_type(captured_nodes)
@@ -232,138 +203,136 @@ local function create_adapter()
   --- Some adapters do not provide the file which the test is defined in.
   --- In those cases we nest the test cases under the solution file.
   ---@param project DotnetProjectInfo
-  local function get_top_level_tests(project)
-    local types = require("neotest.types")
-    local logger = require("neotest.logging")
-    local client_discovery = require("neotest-pester.client")
+  -- local function get_top_level_tests(project)
+  --   local types = require("neotest.types")
+  --   local logger = require("neotest.logging")
+  --   local client_discovery = require("neotest-pester.client")
+  --
+  --   if not project then
+  --     return {}
+  --   end
+  --
+  --   local client = client_discovery.get_client_for_project(project, solution)
+  --
+  --   if not client then
+  --     logger.debug(
+  --       "neotest-pester: not discovering top-level tests due to no client for project: "
+  --         .. vim.inspect(project)
+  --     )
+  --   end
+  --
+  --   local tests_in_file = (client and client:discover_tests()) or {}
+  --   local tests_in_project = tests_in_file[project.proj_file]
+  --   logger.debug(string.format("neotest-pester: top-level tests in file: %s", project.proj_file))
+  --
+  --   if not tests_in_project or next(tests_in_project) == nil then
+  --     return
+  --   end
+  --
+  --   local n = vim.tbl_count(tests_in_project)
+  --
+  --   local nodes = {
+  --     {
+  --       type = "file",
+  --       path = project.proj_file,
+  --       name = vim.fs.basename(project.proj_file),
+  --       range = { 0, 0, n + 1, -1 },
+  --     },
+  --   }
+  --
+  --   local i = 0
+  --
+  --   -- add tests which does not have a matching tree-sitter node.
+  --   for id, test in pairs(tests_in_project) do
+  --     nodes[#nodes + 1] = {
+  --       id = id,
+  --       type = "test",
+  --       path = test.CodeFilePath,
+  --       name = test.DisplayName,
+  --       range = { i, 0, i + 1, -1 },
+  --     }
+  --     i = i + 1
+  --   end
+  --
+  --   if #nodes <= 1 then
+  --     return {}
+  --   end
+  --
+  --   local structure = assert(build_structure(nodes, {}, {
+  --     nested_tests = false,
+  --     require_namespaces = false,
+  --     position_id = function(position, parents)
+  --       return position.id
+  --         or vim
+  --           .iter({
+  --             position.path,
+  --             vim.tbl_map(function(pos)
+  --               return pos.name
+  --             end, parents),
+  --             position.name,
+  --           })
+  --           :flatten()
+  --           :join("::")
+  --     end,
+  --   }))
+  --
+  --   return types.Tree.from_list(structure, function(pos)
+  --     return pos.id
+  --   end)
+  -- end
 
-    if not project then
-      return {}
-    end
-
-    local client = client_discovery.get_client_for_project(project, solution)
-
-    if not client then
-      logger.debug(
-        "neotest-pester: not discovering top-level tests due to no client for project: "
-          .. vim.inspect(project)
-      )
-    end
-
-    local tests_in_file = (client and client:discover_tests()) or {}
-    local tests_in_project = tests_in_file[project.proj_file]
-    logger.debug(string.format("neotest-pester: top-level tests in file: %s", project.proj_file))
-
-    if not tests_in_project or next(tests_in_project) == nil then
-      return
-    end
-
-    local n = vim.tbl_count(tests_in_project)
-
-    local nodes = {
-      {
-        type = "file",
-        path = project.proj_file,
-        name = vim.fs.basename(project.proj_file),
-        range = { 0, 0, n + 1, -1 },
-      },
-    }
-
-    local i = 0
-
-    -- add tests which does not have a matching tree-sitter node.
-    for id, test in pairs(tests_in_project) do
-      nodes[#nodes + 1] = {
-        id = id,
-        type = "test",
-        path = test.CodeFilePath,
-        name = test.DisplayName,
-        range = { i, 0, i + 1, -1 },
-      }
-      i = i + 1
-    end
-
-    if #nodes <= 1 then
-      return {}
-    end
-
-    local structure = assert(build_structure(nodes, {}, {
-      nested_tests = false,
-      require_namespaces = false,
-      position_id = function(position, parents)
-        return position.id
-          or vim
-            .iter({
-              position.path,
-              vim.tbl_map(function(pos)
-                return pos.name
-              end, parents),
-              position.name,
-            })
-            :flatten()
-            :join("::")
-      end,
-    }))
-
-    return types.Tree.from_list(structure, function(pos)
-      return pos.id
-    end)
-  end
-
-  function PesterNeotestAdapter.discover_positions(path)
+  -- NOTE: Required for implementing neotest interface
+  ---Given a file path, parse all the tests within it.
+  ---@async
+  ---@param file_path string Absolute file path
+  ---@return neotest.Tree | nil
+  function PesterNeotestAdapter.discover_positions(file_path)
     local nio = require("nio")
     local lib = require("neotest.lib")
     local types = require("neotest.types")
     local logger = require("neotest.logging")
     local client_discovery = require("neotest-pester.client")
 
-    logger.info(string.format("neotest-pester: scanning %s for tests...", path))
+    logger.info(string.format("neotest-pester: scanning %s for tests...", file_path))
 
-    local project = dotnet_utils.get_proj_info(path)
-    local client = client_discovery.get_client_for_project(project, solution)
+    -- if not client then
+    --   logger.debug(
+    --     "neotest-pester: not discovering tests due to no client for file: " .. vim.inspect(path)
+    --   )
+    --   return
+    -- end
 
-    if not client then
-      logger.debug(
-        "neotest-pester: not discovering tests due to no client for file: " .. vim.inspect(path)
-      )
-      return
-    end
+    -- if project and (vim.endswith(path, ".csproj") or vim.endswith(path, ".fsproj")) then
+    --   return get_top_level_tests(project)
+    -- end
 
-    if project and (vim.endswith(path, ".csproj") or vim.endswith(path, ".fsproj")) then
-      return get_top_level_tests(project)
-    end
-
-    local filetype = (vim.endswith(path, ".fs") and "fsharp") or "c_sharp"
-
-    local tests_in_file = client:discover_tests_for_path(path)
+    local filetype = "ps1"
+    local tests_in_file = client:discover_tests_for_path(file_path)
 
     if not tests_in_file or next(tests_in_file) == nil then
-      logger.debug(string.format("neotest-pester: no tests found for file %s", path))
+      logger.debug(string.format("neotest-pester: no tests found for file %s", file_path))
       return
     end
 
     local tree
 
     if tests_in_file then
-      local content = lib.files.read(path)
+      local content = lib.files.read(file_path)
       tests_in_file = nio.fn.deepcopy(tests_in_file)
       local lang_tree =
         vim.treesitter.get_string_parser(content, filetype, { injections = { [filetype] = "" } })
 
       local root = lang_tree:parse(false)[1]:root()
 
-      local query = lib.treesitter.normalise_query(
-        filetype,
-        filetype == "fsharp" and require("neotest-pester.queries.fsharp")
-          or require("neotest-pester.queries.c_sharp")
-      )
+      local query =
+        lib.treesitter.normalise_query(filetype, require("neotest-pester.queries.powershell"))
 
       local sep = lib.files.sep
-      local path_elems = vim.split(path, sep, { plain = true })
+      local path_elems = vim.split(file_path, sep, { plain = true })
       local nodes = {
         {
           type = "file",
-          path = path,
+          path = file_path,
           name = path_elems[#path_elems],
           range = { root:range() },
         },
@@ -373,7 +342,7 @@ local function create_adapter()
         for i, capture in ipairs(query.captures) do
           captured_nodes[capture] = match[i]
         end
-        local res = build_position(content, captured_nodes, tests_in_file, path)
+        local res = build_position(content, captured_nodes, tests_in_file, file_path)
         if res then
           for _, pos in ipairs(res) do
             nodes[#nodes + 1] = pos
@@ -387,7 +356,7 @@ local function create_adapter()
         nodes[#nodes + 1] = {
           id = id,
           type = "test",
-          path = path,
+          path = file_path,
           name = test.DisplayName,
           range = { line - 1, 0, line - 1, -1 },
         }
@@ -424,11 +393,14 @@ local function create_adapter()
       end)
     end
 
-    logger.info(string.format("neotest-pester: done scanning %s for tests", path))
+    logger.info(string.format("neotest-pester: done scanning %s for tests", file_path))
 
     return tree
   end
 
+  -- NOTE: Required for implementing neotest interface
+  ---@param args neotest.RunArgs
+  ---@return nil | neotest.RunSpec | neotest.RunSpec[]
   function PesterNeotestAdapter.build_spec(args)
     local nio = require("nio")
     local lib = require("neotest.lib")
@@ -490,7 +462,13 @@ local function create_adapter()
     }
   end
 
-  function PesterNeotestAdapter.results(spec, result)
+  -- NOTE: Required for implementing neotest interface
+  ---@async
+  ---@param spec neotest.RunSpec
+  ---@param result neotest.StrategyResult
+  ---@param tree neotest.Tree
+  ---@return table<string, neotest.Result>
+  function PesterNeotestAdapter.results(spec, result, tree)
     local types = require("neotest.types")
     local logger = require("neotest.logging")
 

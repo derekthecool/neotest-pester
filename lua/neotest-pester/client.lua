@@ -1,14 +1,14 @@
 local nio = require("nio")
 local logger = require("neotest.logging")
-local mtp_client = require("neotest-vstest.mtp")
-local vstest_client = require("neotest-vstest.vstest")
-local dotnet_utils = require("neotest-vstest.dotnet_utils")
-local files = require("neotest-vstest.files")
+local mtp_client = require("neotest-pester.mtp")
+local pester_client = require("neotest-pester.pester")
+local dotnet_utils = require("neotest-pester.dotnet_utils")
+local files = require("neotest-pester.files")
 
---- @class neotest-vstest.wrapper-client: neotest-vstest.Client
+--- @class neotest-pester.wrapper-client: neotest-pester.Client
 --- @field project DotnetProjectInfo
---- @field discover_tests_for_path fun(self: neotest-vstest.Client, path: string): table<string, table<string, neotest-vstest.TestCase>>
---- @field private sub_client neotest-vstest.Client
+--- @field discover_tests_for_path fun(self: neotest-pester.Client, path: string): table<string, table<string, neotest-pester.TestCase>>
+--- @field private sub_client neotest-pester.Client
 --- @field private semaphore nio.control.Semaphore
 --- @field private last_discovered integer
 local TestClient = {}
@@ -46,7 +46,7 @@ function TestClient:discover_tests(path)
 
     if last_modified and last_modified > self.last_discovered then
       logger.debug(
-        "neotest-vstest: Discovering tests: "
+        "neotest-pester: Discovering tests: "
           .. " last modified at "
           .. last_modified
           .. " last discovered at "
@@ -84,10 +84,10 @@ local clients = {}
 
 ---@param project DotnetProjectInfo?
 ---@param solution string? path to the solution file
----@return neotest-vstest.wrapper-client?
+---@return neotest-pester.wrapper-client?
 function client_discovery.get_client_for_project(project, solution)
   if not project then
-    logger.debug("neotest-vstest: No project provided, returning nil client.")
+    logger.debug("neotest-pester: No project provided, returning nil client.")
     return nil
   end
 
@@ -105,7 +105,7 @@ function client_discovery.get_client_for_project(project, solution)
 
     if not exists_in_solution then
       logger.debug(
-        "neotest-vstest: project is not part of the solution projects: "
+        "neotest-pester: project is not part of the solution projects: "
           .. vim.inspect(solution_projects.projects)
           .. ", project: "
           .. vim.inspect(project)
@@ -115,27 +115,27 @@ function client_discovery.get_client_for_project(project, solution)
     end
   else
     logger.debug(
-      "neotest-vstest: no solution projects found for solution: " .. vim.inspect(solution)
+      "neotest-pester: no solution projects found for solution: " .. vim.inspect(solution)
     )
   end
 
-  ---@type neotest-vstest.wrapper-client
+  ---@type neotest-pester.wrapper-client
   local client
 
   -- Project is part of a solution or standalone, create a client.
   if project.is_mtp_project then
     logger.debug(
-      "neotest-vstest: Creating mtp client for project "
+      "neotest-pester: Creating mtp client for project "
         .. project.proj_file
         .. " and "
         .. project.dll_file
     )
     client = mtp_client:new(project)
   elseif project.is_test_project then
-    client = vstest_client:new(project)
+    client = pester_client:new(project)
   else
     logger.warn(
-      "neotest-vstest: Project is neither test project nor mtp project, returning nil client for "
+      "neotest-pester: Project is neither test project nor mtp project, returning nil client for "
         .. project.proj_file
     )
     clients[project.proj_file] = false
