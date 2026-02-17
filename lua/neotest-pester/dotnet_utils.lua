@@ -1,7 +1,7 @@
 local nio = require("nio")
 local lib = require("neotest.lib")
 local logger = require("neotest.logging")
-local files = require("neotest-vstest.files")
+local files = require("neotest-pester.files")
 
 --- @class BuildOpts
 --- @field additional_args? string[]
@@ -45,11 +45,11 @@ local function get_target_frameworks(proj_file)
     stdout = true,
   })
 
-  logger.debug("neotest-vstest: msbuild target frameworks for " .. proj_file .. ":")
+  logger.debug("neotest-pester: msbuild target frameworks for " .. proj_file .. ":")
   logger.debug(res.stdout)
 
   if code ~= 0 then
-    logger.error("neotest-vstest: failed to get msbuild target framework for " .. proj_file)
+    logger.error("neotest-pester: failed to get msbuild target framework for " .. proj_file)
     logger.error(res.stderr)
 
     nio.scheduler()
@@ -63,7 +63,7 @@ local function get_target_frameworks(proj_file)
   local ok, parsed = pcall(nio.fn.json_decode, res.stdout)
 
   if not ok then
-    logger.error("neotest-vstest: failed to parse msbuild target framework for " .. proj_file)
+    logger.error("neotest-pester: failed to parse msbuild target framework for " .. proj_file)
     logger.error(parsed)
 
     nio.scheduler()
@@ -90,7 +90,7 @@ local function get_target_frameworks(proj_file)
   end
 
   if not target_framework or target_framework == "" then
-    logger.error("neotest-vstest: failed to get target framework for " .. proj_file)
+    logger.error("neotest-pester: failed to get target framework for " .. proj_file)
     logger.error(framework_info)
 
     nio.scheduler()
@@ -130,7 +130,7 @@ local project_semaphore = {}
 ---@return DotnetProjectInfo?
 function dotnet_utils.get_proj_info(path)
   local normalized_path = vim.fs.normalize(path)
-  logger.debug("neotest-vstest: getting project info for " .. path)
+  logger.debug("neotest-pester: getting project info for " .. path)
 
   local proj_file
 
@@ -161,7 +161,7 @@ function dotnet_utils.get_proj_info(path)
 
   semaphore.acquire()
 
-  logger.debug("neotest-vstest: found project file for " .. path .. ": " .. proj_file)
+  logger.debug("neotest-pester: found project file for " .. path .. ": " .. proj_file)
 
   if proj_info_cache[proj_file] then
     local project = proj_info_cache[proj_file]
@@ -207,7 +207,7 @@ function dotnet_utils.get_proj_info(path)
   local output = nio.fn.json_decode(res.stdout)
   local properties = output.Properties
 
-  logger.debug("neotest-vstest: msbuild properties for " .. proj_file .. ":")
+  logger.debug("neotest-pester: msbuild properties for " .. proj_file .. ":")
   logger.debug(properties)
 
   local is_mtp_disabled = string.lower(properties.DisableTestingPlatformServerCapability) == "true"
@@ -231,7 +231,7 @@ function dotnet_utils.get_proj_info(path)
   })
 
   if proj_data.dll_file == "" then
-    logger.debug("neotest-vstest: failed to find dll file for " .. proj_file)
+    logger.debug("neotest-pester: failed to find dll file for " .. proj_file)
     logger.debug(path)
     logger.debug(res.stdout)
   end
@@ -265,7 +265,7 @@ local function list_projects(solution_path)
   })
 
   local solution_dir = vim.fs.dirname(solution_path)
-  logger.debug("neotest-vstest: dotnet sln " .. solution_path .. " list output:")
+  logger.debug("neotest-pester: dotnet sln " .. solution_path .. " list output:")
   logger.debug(res.stdout)
 
   local relative_path_projects = vim.list_slice(nio.fn.split(res.stdout, "\n"), 3)
@@ -321,7 +321,7 @@ local function get_updated_solution_info(solution_info)
   local last_modified = files.get_path_last_modified(solution_info.solution_file)
 
   if solution_info.last_updated < last_modified then
-    logger.debug("neotest-vstest: updating solution info for " .. solution_info.solution_file)
+    logger.debug("neotest-pester: updating solution info for " .. solution_info.solution_file)
     local projects = get_solution_projects(solution_info.solution_file)
     return {
       solution_file = solution_info.solution_file,
@@ -373,7 +373,7 @@ local build_semaphore = nio.control.semaphore(1)
 function dotnet_utils.build_path(path)
   build_semaphore.acquire()
 
-  logger.debug("neotest-vstest: building path " .. path)
+  logger.debug("neotest-pester: building path " .. path)
   local build_cmd = { "dotnet", "build", path }
   for _, arg in ipairs(dotnet_utils.opts.additional_args or {}) do
     table.insert(build_cmd, arg)
@@ -384,10 +384,10 @@ function dotnet_utils.build_path(path)
 
   if exitCode ~= 0 then
     nio.scheduler()
-    logger.error("neotest-vstest: failed to build path " .. path)
+    logger.error("neotest-pester: failed to build path " .. path)
     logger.error(out.stdout)
     logger.error(out.stderr)
-    vim.notify_once("neotest-vstest: failed to build project " .. path, vim.log.levels.ERROR)
+    vim.notify_once("neotest-pester: failed to build project " .. path, vim.log.levels.ERROR)
     return false
   end
 
