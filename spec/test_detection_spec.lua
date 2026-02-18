@@ -26,6 +26,7 @@ describe("Test test detection", function()
   nio.tests.it("detect tests in ps1 file", function()
     local test_file = powershell_module_path .. "/Test/DotFunctional.Functions.Tests.ps1"
     local positions = plugin.discover_positions(test_file)
+    assert.are.same(1, vim.fn.file_readable(test_file))
 
     local tests = {}
 
