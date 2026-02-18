@@ -291,95 +291,181 @@ local function create_adapter()
     local lib = require("neotest.lib")
     local types = require("neotest.types")
     local logger = require("neotest.logging")
-    local client_discovery = require("neotest-pester.client")
 
     if not file_path:match("%.Tests%.ps1$") then
-      logger.verbose(string.format("not a test file: %s", file_path))
+      logger.debug(string.format("not a test file: %s", file_path))
       return nil
     end
 
     logger.info(string.format("neotest-pester: scanning %s for tests...", file_path))
 
-    local tree
+    -- Read file content
     local content = lib.files.read(file_path)
-    tests_in_file = nio.fn.deepcopy(tests_in_file)
-    local lang_tree =
-      vim.treesitter.get_string_parser(content, "powershell", { injections = { [filetype] = "" } })
 
-    local root = lang_tree:parse(false)[1]:root()
+    -- Parse with treesitter using your queries
+    local nodes = parse_with_treesitter(content, file_path)
 
-    local query =
-      lib.treesitter.normalise_query("powershell", require("neotest-pester.queries.powershell"))
-
-    local sep = lib.files.sep
-    local path_elems = vim.split(file_path, sep, { plain = true })
-    local nodes = {
-      {
-        type = "file",
-        path = file_path,
-        name = path_elems[#path_elems],
-        range = { root:range() },
-      },
-    }
-    for _, match in query:iter_matches(root, content, nil, nil, { all = false }) do
-      local captured_nodes = {}
-      for i, capture in ipairs(query.captures) do
-        captured_nodes[capture] = match[i]
-      end
-      local res = build_position(content, captured_nodes, tests_in_file, file_path)
-      if res then
-        for _, pos in ipairs(res) do
-          nodes[#nodes + 1] = pos
-        end
-      end
+    if #nodes == 0 then
+      logger.debug(string.format("no tests found in: %s", file_path))
+      return nil
     end
 
-    -- add tests which does not have a matching tree-sitter node.
-    for id, test in pairs(tests_in_file) do
-      local line = test.LineNumber or 0
-      nodes[#nodes + 1] = {
-        id = id,
-        type = "test",
-        path = file_path,
-        name = test.DisplayName,
-        range = { line - 1, 0, line - 1, -1 },
-      }
-    end
+    -- Build the tree structure
+    local tree = build_test_tree(nodes, file_path)
 
-    -- for _, node in ipairs(nodes) do
-    --   node.project = project
-    -- end
-
-    if #nodes <= 1 then
-      logger.debug(string.format("no tests found in path: %s", file_path))
-      return {}
-    end
-
-    local structure = assert(build_structure(nodes, {}, {
-      nested_tests = false,
-      require_namespaces = false,
-      position_id = function(position, parents)
-        return position.id
-          or vim
-            .iter({
-              position.path,
-              vim.tbl_map(function(pos)
-                return pos.name
-              end, parents),
-              position.name,
-            })
-            :flatten()
-            :join("::")
-      end,
-    }))
-
-    tree = types.Tree.from_list(structure, function(pos)
-      return pos.id
-    end)
-
-    logger.info(string.format("neotest-pester: done scanning %s for tests", file_path))
+    logger.info(
+      string.format("neotest-pester: found %d tests in %s", count_test_nodes(nodes), file_path)
+    )
 
     return tree
+  end
+
+  ---Parse the file using treesitter and your queries
+  ---@param content string
+  ---@param file_path string
+  ---@return table[]
+  local function parse_with_treesitter(content, file_path)
+    local lib = require("neotest.lib")
+    local logger = require("neotest.logging")
+    local nodes = {}
+
+    -- Get treesitter parser
+    local ok, parser = pcall(vim.treesitter.get_string_parser, content, "powershell")
+    if not ok or not parser then
+      logger.error("Failed to get treesitter parser for powershell")
+      return nodes
+    end
+
+    -- Parse the content
+    local tree = parser:parse()[1]
+    if not tree then
+      logger.error("Failed to parse file with treesitter")
+      return nodes
+    end
+
+    local root = tree:root()
+
+    -- Load your query
+    local query_string = require("neotest-pester.queries.powershell")
+    local ok, query = pcall(vim.treesitter.query.parse, "powershell", query_string)
+    if not ok then
+      logger.error("Failed to parse treesitter query: " .. tostring(query))
+      return nodes
+    end
+
+    -- Iterate through all matches
+    for pattern, match, metadata in query:iter_matches(root, content, 0, -1) do
+      local node_info = {
+        nodes = {},
+        type = nil,
+        name = nil,
+        range = nil,
+      }
+
+      -- Process captures for this match
+      for id, node in pairs(match) do
+        local capture_name = query.captures[id]
+
+        if capture_name == "namespace.definition" or capture_name == "test.definition" then
+          -- This is the definition node itself - get its range
+          node_info.range = { node:range() }
+          node_info.type = capture_name == "namespace.definition" and "namespace" or "test"
+        elseif capture_name == "namespace.name" then
+          node_info.name = vim.treesitter.get_node_text(node, content)
+          node_info.type = "namespace"
+        elseif capture_name == "test.name" then
+          node_info.name = vim.treesitter.get_node_text(node, content)
+          node_info.type = "test"
+        elseif capture_name == "function_name" then
+          -- We might not need this, but we'll store it just in case
+          node_info.function_name = vim.treesitter.get_node_text(node, content)
+        end
+      end
+
+      -- Only add if we have both name and type
+      if node_info.name and node_info.type then
+        local range = node_info.range or { 0, 0, 0, 0 }
+        table.insert(nodes, {
+          name = node_info.name,
+          type = node_info.type,
+          path = file_path,
+          -- Convert treesitter 0-based ranges to neotest expected format
+          range = {
+            range[1], -- start line (0-based)
+            range[2], -- start col
+            range[3], -- end line (0-based)
+            range[4], -- end col
+          },
+        })
+      end
+    end
+
+    return nodes
+  end
+
+  ---Count how many test nodes we have (excluding namespaces)
+  ---@param nodes table[]
+  ---@return integer
+  local function count_test_nodes(nodes)
+    local count = 0
+    for _, node in ipairs(nodes) do
+      if node.type == "test" then
+        count = count + 1
+      end
+    end
+    return count
+  end
+
+  ---Build the test tree structure
+  ---@param nodes table[]
+  ---@param file_path string
+  ---@return neotest.Tree
+  local function build_test_tree(nodes, file_path)
+    local types = require("neotest.types")
+
+    -- Create file node
+    local sep = package.config:sub(1, 1)
+    local path_parts = vim.split(file_path, sep, { plain = true })
+    local file_name = path_parts[#path_parts]
+
+    -- Find the last line of the file for range
+    local content = require("neotest.lib").files.read(file_path)
+    local last_line = #vim.split(content, "\n")
+
+    local file_node = {
+      type = "file",
+      path = file_path,
+      name = file_name,
+      range = { 0, 0, last_line, 0 },
+    }
+
+    -- Build parent-child relationships
+    -- For now, we'll keep it simple: all tests are direct children of the file
+    -- In a more advanced version, you'd handle Describe/Context nesting
+    local structure = { { node = file_node, parent = nil } }
+
+    for i, node in ipairs(nodes) do
+      -- Generate a unique ID for the node
+      local node_id = string.format("%s::%s:%d", file_path, node.name, i)
+
+      local position = {
+        id = node_id,
+        type = node.type,
+        path = file_path,
+        name = node.name,
+        range = node.range,
+      }
+
+      table.insert(structure, {
+        node = position,
+        parent = file_node,
+      })
+    end
+
+    -- Create the tree
+    return types.Tree.from_list(structure, function(position)
+      return position.id or (position.path .. "::" .. (position.name or ""))
+    end)
   end
 
   -- NOTE: Required for implementing neotest interface
