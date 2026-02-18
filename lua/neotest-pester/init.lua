@@ -281,45 +281,6 @@ local function create_adapter()
   --   end)
   -- end
 
-  -- NOTE: Required for implementing neotest interface
-  ---Given a file path, parse all the tests within it.
-  ---@async
-  ---@param file_path string Absolute file path
-  ---@return neotest.Tree | nil
-  function PesterNeotestAdapter.discover_positions(file_path)
-    local nio = require("nio")
-    local lib = require("neotest.lib")
-    local types = require("neotest.types")
-    local logger = require("neotest.logging")
-
-    if not file_path:match("%.Tests%.ps1$") then
-      logger.debug(string.format("not a test file: %s", file_path))
-      return nil
-    end
-
-    logger.info(string.format("neotest-pester: scanning %s for tests...", file_path))
-
-    -- Read file content
-    local content = lib.files.read(file_path)
-
-    -- Parse with treesitter using your queries
-    local nodes = parse_with_treesitter(content, file_path)
-
-    if #nodes == 0 then
-      logger.debug(string.format("no tests found in: %s", file_path))
-      return nil
-    end
-
-    -- Build the tree structure
-    local tree = build_test_tree(nodes, file_path)
-
-    logger.info(
-      string.format("neotest-pester: found %d tests in %s", count_test_nodes(nodes), file_path)
-    )
-
-    return tree
-  end
-
   ---Parse the file using treesitter and your queries
   ---@param content string
   ---@param file_path string
@@ -403,19 +364,6 @@ local function create_adapter()
     return nodes
   end
 
-  ---Count how many test nodes we have (excluding namespaces)
-  ---@param nodes table[]
-  ---@return integer
-  local function count_test_nodes(nodes)
-    local count = 0
-    for _, node in ipairs(nodes) do
-      if node.type == "test" then
-        count = count + 1
-      end
-    end
-    return count
-  end
-
   ---Build the test tree structure
   ---@param nodes table[]
   ---@param file_path string
@@ -466,6 +414,58 @@ local function create_adapter()
     return types.Tree.from_list(structure, function(position)
       return position.id or (position.path .. "::" .. (position.name or ""))
     end)
+  end
+
+  -- NOTE: Required for implementing neotest interface
+  ---Given a file path, parse all the tests within it.
+  ---@async
+  ---@param file_path string Absolute file path
+  ---@return neotest.Tree | nil
+  function PesterNeotestAdapter.discover_positions(file_path)
+    local nio = require("nio")
+    local lib = require("neotest.lib")
+    local types = require("neotest.types")
+    local logger = require("neotest.logging")
+
+    if not file_path:match("%.Tests%.ps1$") then
+      logger.debug(string.format("not a test file: %s", file_path))
+      return nil
+    end
+
+    logger.info(string.format("neotest-pester: scanning %s for tests...", file_path))
+
+    -- Read file content
+    local content = lib.files.read(file_path)
+
+    -- Parse with treesitter using your queries
+    local nodes = parse_with_treesitter(content, file_path)
+
+    if #nodes == 0 then
+      logger.debug(string.format("no tests found in: %s", file_path))
+      return nil
+    end
+
+    -- Build the tree structure
+    local tree = build_test_tree(nodes, file_path)
+
+    logger.info(
+      string.format("neotest-pester: found %d tests in %s", count_test_nodes(nodes), file_path)
+    )
+
+    return tree
+  end
+
+  ---Count how many test nodes we have (excluding namespaces)
+  ---@param nodes table[]
+  ---@return integer
+  local function count_test_nodes(nodes)
+    local count = 0
+    for _, node in ipairs(nodes) do
+      if node.type == "test" then
+        count = count + 1
+      end
+    end
+    return count
   end
 
   -- NOTE: Required for implementing neotest interface
