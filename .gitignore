@@ -48,3 +48,5 @@ deps/
 
 obj/
 bin/
+
+.tests/

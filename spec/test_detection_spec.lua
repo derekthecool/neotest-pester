@@ -29,6 +29,8 @@ describe("Test test detection", function()
 
     local tests = {}
 
+    assert.is_not_nil(positions)
+
     for _, position in positions:iter() do
       if position.type == "test" then
         tests[#tests + 1] = position.name
