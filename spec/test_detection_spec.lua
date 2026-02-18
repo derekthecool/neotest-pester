@@ -8,7 +8,7 @@ describe("Test test detection", function()
   local nio = require("nio")
   ---@type neotest.Adapter
   local plugin
-  local powershell_module_path = vim.fn.getcwd() .. "/spec/DotFunctional"
+  local powershell_module_path = vim.fn.getcwd() .. "/spec/samples/DotFunctional"
 
   lazy_setup(function()
     require("neotest").setup({
