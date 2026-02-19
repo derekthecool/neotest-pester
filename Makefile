@@ -1,12 +1,12 @@
-# we disable the `all` command because some external tool might run it automatically
-.SUFFIXES:
+test: deps/mini.nvim
+	nvim --headless --noplugin -u ./scripts/minimal_init.lua -c "lua MiniTest.run()"
 
-all:
+# Run test from file at `$FILE` environment variable
+test_file: deps/mini.nvim
+	nvim --headless --noplugin -u ./scripts/minimal_init.lua -c "lua MiniTest.run_file('$(FILE)')"
 
-# runs all the test files.
-test:
-	luarocks test --local
-
-# performs a lint check and fixes issue if possible, following the config in `stylua.toml`.
-lint:
-	stylua .
+# Download 'mini.nvim' to use its 'mini.test' testing module
+deps/mini.nvim:
+	@mkdir -p deps
+	git clone --filter=blob:none https://github.com/nvim-mini/mini.nvim deps/mini.nvim
+	git clone --filter=blob:none https://github.com/nvim-neotest/nvim-nio deps/nvim-nio
