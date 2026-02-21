@@ -2,7 +2,7 @@
 
 ---@return neotest.Adapter
 local function create_adapter()
-  local dotnet_utils = require("neotest-pester.dotnet_utils")
+  -- local dotnet_utils = require("neotest-pester.dotnet_utils")
   local config = require("neotest-pester.config").get_config()
 
   --- TODO: (Derek Lomax) Sat 14 Feb 2026 11:10:37 PM MST, get DAP working
@@ -422,37 +422,38 @@ local function create_adapter()
   ---@param file_path string Absolute file path
   ---@return neotest.Tree | nil
   function PesterNeotestAdapter.discover_positions(file_path)
-    local nio = require("nio")
     local lib = require("neotest.lib")
-    local types = require("neotest.types")
-    local logger = require("neotest.logging")
-
-    if not file_path:match("%.Tests%.ps1$") then
-      logger.debug(string.format("not a test file: %s", file_path))
-      return nil
-    end
-
-    logger.info(string.format("neotest-pester: scanning %s for tests...", file_path))
-
-    -- Read file content
-    local content = lib.files.read(file_path)
-
-    -- Parse with treesitter using your queries
-    local nodes = parse_with_treesitter(content, file_path)
-
-    if #nodes == 0 then
-      logger.debug(string.format("no tests found in: %s", file_path))
-      return nil
-    end
-
-    -- Build the tree structure
-    local tree = build_test_tree(nodes, file_path)
-
-    logger.info(
-      string.format("neotest-pester: found %d tests in %s", count_test_nodes(nodes), file_path)
+    local pester_treesitter_query = [[
+;; pester describe blocks
+(command
+  (command_name)@function_name (#match? @function_name "[Dd][Ee][Ss][Cc][Rr][Ii][Bb][Ee]")
+  (command_elements
+    (array_literal_expression
+      (unary_expression
+        (string_literal
+          (verbatim_string_characters)@namespace.name
+        )
+      )
     )
+  )
+)@namespace.definition
 
-    return tree
+;; pester it blocks
+(command
+  (command_name)@function_name (#match? @function_name "[Ii][tt]")
+  (command_elements
+    (array_literal_expression
+      (unary_expression
+        (string_literal
+          (verbatim_string_characters)@test.name
+        )
+      )
+    )
+  )
+)@test.definition
+]]
+    -- local normalized_query = lib.treesitter.normalise_query("powershell", pester_treesitter_query)
+    return lib.treesitter.parse_positions(file_path, pester_treesitter_query)
   end
 
   ---Count how many test nodes we have (excluding namespaces)

@@ -50,11 +50,14 @@ function neotest.Adapter.results(spec, result, tree) end
 ]]
 
 ---@class neotest.Adapter
----@field name string
 local plugin = require("neotest-pester")
 
 T["interface.main"] = function()
   eq("table", type(plugin))
+end
+
+T["interface.name"] = function()
+  eq("neotest-pester", plugin.name)
 end
 
 T["interface.root"] = function()
