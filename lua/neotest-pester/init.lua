@@ -479,6 +479,11 @@ local function create_adapter()
     local utilities = require("neotest-pester.utilities")
     local client_discovery = require("neotest-pester.client")
 
+    --[[
+    Some notes on running pester tests
+    https://pester.dev/docs/usage/tags
+     ]]
+
     local projects = {}
 
     local tree = args.tree

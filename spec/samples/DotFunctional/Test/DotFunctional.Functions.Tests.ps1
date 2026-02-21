@@ -26,4 +26,12 @@ Describe 'Reduce-Object' {
     It 'Reduce-Object with no provided script block or initial value sums values' {
         1 .. 10 | Reduce-Object | Should -Be 55
     }
+
+    It 'Reduce-Object test failure' {
+        1 .. 10 | Reduce-Object | Should -Be 999
+    }
+
+    It 'Reduce-Object skipped test' -Skip {
+        1 .. 10 | Reduce-Object | Should -Be 999
+    }
 }

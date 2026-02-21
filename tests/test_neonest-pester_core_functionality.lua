@@ -8,13 +8,13 @@ local T = MiniTest.new_set()
 local plugin = require("neotest-pester")
 
 T["interface.root.works"] = function()
+  local current_dir = vim.fn.getcwd()
   local directories = {
-    "/home/tester/powershell",
-    "blah-blah-blah",
-    "powershell/is/awesome",
+    current_dir,
+    vim.fs.joinpath(current_dir, "lua"),
   }
   for _, value in ipairs(directories) do
-    eq(vim.fn.getcwd(), plugin.root(value))
+    eq(current_dir, plugin.root(value))
   end
 end
 
