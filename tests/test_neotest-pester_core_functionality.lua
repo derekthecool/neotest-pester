@@ -1,6 +1,5 @@
 local new_set = MiniTest.new_set
 local expect, eq = MiniTest.expect, MiniTest.expect.equality
-local nio = require("nio")
 
 -- local T = MiniTest.new_set()
 local child = MiniTest.new_child_neovim()
@@ -22,7 +21,7 @@ local T = MiniTest.new_set({
 local plugin = require("neotest-pester")
 
 T["interface.root.works"] = function()
-  local current_dir = vim.fn.getcwd()
+  local current_dir = vim.fs.normalize(vim.fn.getcwd())
   local directories = {
     current_dir,
     vim.fs.joinpath(current_dir, "lua"),
@@ -59,6 +58,8 @@ T["interface.discover_positions"] = function()
   local tree
   local pester_test_example_file =
     "/home/derek/neovim/neotest-pester/spec/samples/DotFunctional/Test/DotFunctional.Functions.Tests.ps1"
+
+  local nio = require("nio")
   local task = nio.run(function()
     tree = plugin.discover_positions(pester_test_example_file)
   end)

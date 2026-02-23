@@ -2,6 +2,10 @@
 vim.cmd([[let &rtp.=','.getcwd()]])
 
 local required_packages = {
+  -- testing framework
+  "mini.nvim",
+
+  -- neotest dependencies
   "neotest",
   "nvim-nio",
   "plenary.nvim",
@@ -19,4 +23,5 @@ if #vim.api.nvim_list_uis() == 0 then
 
   -- Set up 'mini.test'
   require("mini.test").setup()
+  require("nio")
 end

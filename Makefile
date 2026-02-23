@@ -11,7 +11,6 @@ deps/mini.nvim:
 	git clone --filter=blob:none https://github.com/nvim-mini/mini.nvim deps/mini.nvim
 	git clone --filter=blob:none https://github.com/nvim-neotest/nvim-nio deps/nvim-nio
 	git clone --filter=blob:none https://github.com/nvim-neotest/neotest deps/neotest
-  git clone --filter=blob:none https://github.com/nvim-neotest/nvim-nio deps/nvim-nio
-  git clone --filter=blob:none https://github.com/nvim-lua/plenary.nvim deps/plenary.nvim
-  git clone --filter=blob:none https://github.com/antoinemadec/FixCursorHold.nvim deps/FixCursorHold.nvim
-  git clone --filter=blob:none https://github.com/nvim-treesitter/nvim-treesitter deps/nvim-treesitter
+	git clone --filter=blob:none https://github.com/nvim-lua/plenary.nvim deps/plenary.nvim
+	git clone --filter=blob:none https://github.com/antoinemadec/FixCursorHold.nvim deps/FixCursorHold.nvim
+	git clone --filter=blob:none https://github.com/nvim-treesitter/nvim-treesitter deps/nvim-treesitter
