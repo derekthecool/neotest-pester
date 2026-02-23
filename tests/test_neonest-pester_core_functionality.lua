@@ -2,7 +2,21 @@ local new_set = MiniTest.new_set
 local expect, eq = MiniTest.expect, MiniTest.expect.equality
 local nio = require("nio")
 
-local T = MiniTest.new_set()
+-- local T = MiniTest.new_set()
+local child = MiniTest.new_child_neovim()
+
+local T = MiniTest.new_set({
+  hooks = {
+    pre_case = function()
+      -- Restart child process with custom 'init.lua' script
+      child.restart({ "-u", "scripts/minimal_init.lua" })
+      -- Load tested plugin
+      child.lua([[M = require('neotest-pester')]])
+    end,
+    -- Stop once all test cases are finished
+    post_once = child.stop,
+  },
+})
 
 ---@class neotest.Adapter
 local plugin = require("neotest-pester")
@@ -43,6 +57,8 @@ T["interface.discover_positions"] = function()
     "DotFunctional.Functions.Tests.ps1"
   )
   local tree
+  local pester_test_example_file =
+    "/home/derek/neovim/neotest-pester/spec/samples/DotFunctional/Test/DotFunctional.Functions.Tests.ps1"
   local task = nio.run(function()
     tree = plugin.discover_positions(pester_test_example_file)
   end)
