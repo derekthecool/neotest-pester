@@ -24,7 +24,7 @@ T["interface.root.works"] = function()
   local current_dir = vim.fs.normalize(vim.fn.getcwd())
   local directories = {
     current_dir,
-    vim.fs.joinpath(current_dir, "lua"),
+    vim.fs.normalize(vim.fs.joinpath(current_dir, "lua")),
   }
   for _, value in ipairs(directories) do
     eq(current_dir, plugin.root(value))
@@ -49,7 +49,7 @@ end
 T["interface.discover_positions"] = function()
   local pester_test_example_file = vim.fs.joinpath(
     vim.fn.getcwd(),
-    "spec",
+    "test",
     "samples",
     "DotFunctional",
     "Test",
@@ -57,13 +57,12 @@ T["interface.discover_positions"] = function()
   )
   local tree
   local pester_test_example_file =
-    "/home/derek/neovim/neotest-pester/spec/samples/DotFunctional/Test/DotFunctional.Functions.Tests.ps1"
+    "/home/derek/neovim/neotest-pester/tests/samples/DotFunctional/Test/DotFunctional.Functions.Tests.ps1"
 
   local nio = require("nio")
   local task = nio.run(function()
     tree = plugin.discover_positions(pester_test_example_file)
   end)
-  -- eq("function", pester_test_example_file)
   eq("function", tree)
 end
 

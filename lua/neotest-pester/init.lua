@@ -453,8 +453,7 @@ local function create_adapter()
 )@test.definition
 ]]
     -- local normalized_query = lib.treesitter.normalise_query("powershell", pester_treesitter_query)
-    -- return lib.treesitter.parse_positions(file_path, pester_treesitter_query)
-    return "asdf"
+    return lib.treesitter.parse_positions(file_path, pester_treesitter_query)
   end
 
   ---Count how many test nodes we have (excluding namespaces)
