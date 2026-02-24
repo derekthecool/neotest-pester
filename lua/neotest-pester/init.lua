@@ -484,31 +484,24 @@ local function create_adapter()
     https://pester.dev/docs/usage/tags
      ]]
 
-    local projects = {}
+    --[[
+---@class neotest.RunArgs
+---@field tree neotest.Tree
+---@field extra_args? string[]
+---@field strategy string
+
+---@class neotest.RunSpec
+---@field command string[]
+---@field env? table<string, string>
+---@field cwd? string
+---@field context? table Arbitrary data to preserve state between running and result collection
+---@field strategy? table|neotest.Strategy Arguments for strategy or override for chosen strategy
+---@field stream? fun(output_stream: fun(): string[]): fun(): table<string, neotest.Result>
+---]]
 
     local tree = args.tree
     if not tree then
       return
-    end
-
-    for _, position in tree:iter() do
-      if position.type == "test" then
-        logger.debug(position)
-        local client = client_discovery.get_client_for_project(position.project, solution)
-        if client then
-          local tests = projects[client] or {}
-          projects[client] = vim.list_extend(tests, { position.id })
-        else
-          vim.notify_once(
-            string.format(
-              "neotest-pester: could not find adapter client for test '%s' in project '%s'",
-              position.name,
-              vim.inspect(position.project)
-            ),
-            vim.log.levels.ERROR
-          )
-        end
-      end
     end
 
     local stream_path = nio.fn.tempname()
@@ -516,9 +509,13 @@ local function create_adapter()
     local stream = utilities.stream_queue()
 
     return {
+      command = {
+        "pwsh",
+        "-NoProfile",
+        "-Command",
+        "Invoke-Pester",
+      },
       context = {
-        client_id_map = projects,
-        solution = solution,
         results = {},
         write_stream = stream.write,
       },
@@ -532,9 +529,9 @@ local function create_adapter()
           return { [new_results.id] = new_results.result }
         end
       end,
-      strategy = (args.strategy == "dap" and require("neotest-pester.strategies.pester_debugger")(
-        dap_settings
-      )) or require("neotest-pester.strategies.pester"),
+      --   strategy = (args.strategy == "dap" and require("neotest-pester.strategies.pester_debugger")(
+      --     dap_settings
+      --   )) or require("neotest-pester.strategies.pester"),
     }
   end
 
