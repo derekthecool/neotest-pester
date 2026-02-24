@@ -469,22 +469,7 @@ local function create_adapter()
     return count
   end
 
-  -- NOTE: Required for implementing neotest interface
-  ---@param args neotest.RunArgs
-  ---@return nil | neotest.RunSpec | neotest.RunSpec[]
-  function PesterNeotestAdapter.build_spec(args)
-    local nio = require("nio")
-    local lib = require("neotest.lib")
-    local logger = require("neotest.logging")
-    local utilities = require("neotest-pester.utilities")
-    local client_discovery = require("neotest-pester.client")
-
-    --[[
-    Some notes on running pester tests
-    https://pester.dev/docs/usage/tags
-     ]]
-
-    --[[
+  --[[
 ---@class neotest.RunArgs
 ---@field tree neotest.Tree
 ---@field extra_args? string[]
@@ -499,39 +484,56 @@ local function create_adapter()
 ---@field stream? fun(output_stream: fun(): string[]): fun(): table<string, neotest.Result>
 ---]]
 
+  -- NOTE: Required for implementing neotest interface
+  ---@param args neotest.RunArgs
+  ---@return nil | neotest.RunSpec | neotest.RunSpec[]
+  function PesterNeotestAdapter.build_spec(args)
+    local nio = require("nio")
+    local lib = require("neotest.lib")
+    local logger = require("neotest.logging")
+
     local tree = args.tree
     if not tree then
       return
     end
 
+    local results_path = nio.fn.tempname()
     local stream_path = nio.fn.tempname()
     lib.files.write(stream_path, "")
-    local stream = utilities.stream_queue()
+
+    local stream_data, stop_stream = lib.files.stream_lines(stream_path)
+
+    local command = {}
+    local pester_command =
+      "pwsh -NoProfile -Command $T=Invoke-Pester -PassThru 3>$null 6>$null; $T.tests | Sort-Object ExpandedName -Unique | Select-Object Result, ExpandedName | ConvertTo-Json -Compress"
+    for item in pester_command:gmatch("%S+") do
+      table.insert(command, item)
+    end
 
     return {
-      command = {
-        "pwsh",
-        "-NoProfile",
-        "-Command",
-        "Invoke-Pester",
-      },
+      command = command,
       context = {
         results = {},
-        write_stream = stream.write,
+        results_path = results_path,
+        stop_stream = stop_stream,
       },
       stream = function()
         return function()
-          local new_results = stream.get()
+          local new_results = stream_data()
+          logger.debug(new_results)
+          local results = {}
+          for _, line in ipairs(lines) do
+            local result = vim.json.decode(line, { luanil = { object = true } })
+            results[result.id] = result.result
+          end
 
           logger.info("neotest-pester: received streamed test results in adapter spec")
           logger.debug(new_results)
 
-          return { [new_results.id] = new_results.result }
+          return results
+          -- return { [new_results.id] = new_results.result }
         end
       end,
-      --   strategy = (args.strategy == "dap" and require("neotest-pester.strategies.pester_debugger")(
-      --     dap_settings
-      --   )) or require("neotest-pester.strategies.pester"),
     }
   end
 
@@ -551,19 +553,19 @@ local function create_adapter()
     ---@type table<string, neotest.Result>
     local results = spec.context.results or {}
 
-    if not results then
-      for _, id in ipairs(vim.tbl_values(spec.context.projects_id_map)) do
-        results[id] = {
-          status = types.ResultStatus.skipped,
-          output = spec.context.result_path,
-          errors = {
-            { message = result.output },
-            { message = "failed to read result file" },
-          },
-        }
-      end
-      return results
-    end
+    -- if not results then
+    --   for _, id in ipairs(vim.tbl_values(spec.context.projects_id_map)) do
+    --     results[id] = {
+    -- status = types.ResultStatus.skipped,
+    --       output = spec.context.result_path,
+    --       errors = {
+    --         { message = result.output },
+    --         { message = "failed to read result file" },
+    --       },
+    --     }
+    --   end
+    --   return results
+    -- end
 
     logger.debug(results)
 

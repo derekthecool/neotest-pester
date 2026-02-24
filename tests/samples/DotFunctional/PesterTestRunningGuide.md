@@ -14,6 +14,9 @@ Do it again but with full output parsing
 
 ```powershell
 Invoke-Pester -FullNameFilter '*Function Format-Pairs exists' -PassThru 6>$null | ForEach-Object Tests | Select-Object Result, ExpandedName | ConvertTo-Json
+
+$T=Invoke-Pester -PassThru 6>$null; $T.tests | Sort-Object ExpandedName -Unique | Select-Object Result, ExpandedName | ConvertTo-Json
+pwsh -NoProfile -Command '$T=Invoke-Pester -PassThru 6>$null; $T.tests | Sort-Object ExpandedName -Unique | Select-Object Result, ExpandedName | ConvertTo-Json -Compress'
 ```
 
 ## Parse Output Easily
