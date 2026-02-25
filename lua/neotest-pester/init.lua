@@ -518,20 +518,39 @@ local function create_adapter()
         stop_stream = stop_stream,
       },
       stream = function()
+        logger.info("neotest-pester: stream wrapper function called")
         return function()
-          local new_results = stream_data()
-          logger.debug(new_results)
-          local results = {}
-          for _, line in ipairs(lines) do
-            local result = vim.json.decode(line, { luanil = { object = true } })
-            results[result.id] = result.result
+          local lines = stream_data()
+          if not lines or #lines == 0 then
+            logger.info("neotest-pester: stream processor lines was nil or 0 lines")
+            return {}
           end
 
-          logger.info("neotest-pester: received streamed test results in adapter spec")
-          logger.debug(new_results)
+          logger.debug("Received stream lines:", lines)
 
+          local results = {}
+
+          -- Combine all lines (in case JSON is split across lines)
+          local json_text = table.concat(lines, "")
+
+          -- Decode the JSON
+          local ok, decoded = pcall(vim.json.decode, json_text, { luanil = { object = true } })
+          if ok and type(decoded) == "table" then
+            for _, item in ipairs(decoded) do
+              if item.ExpandedName and item.Result then
+                results[item.ExpandedName] = {
+                  status = item.Result == "Passed" and "passed"
+                    or item.Result == "Failed" and "failed"
+                    or "skipped",
+                }
+              end
+            end
+          else
+            logger.error("Failed to decode JSON:", json_text)
+          end
+
+          logger.info("neotest-pester: processed " .. vim.inspect(results))
           return results
-          -- return { [new_results.id] = new_results.result }
         end
       end,
     }
@@ -546,28 +565,74 @@ local function create_adapter()
   function PesterNeotestAdapter.results(spec, result, tree)
     local types = require("neotest.types")
     local logger = require("neotest.logging")
+    local lib = require("neotest.lib")
 
     logger.info("neotest-pester: waiting for test results")
-    logger.debug(spec)
-    logger.debug(result)
+    logger.debug("neotest-pester: spec: ", spec)
+    logger.debug("neotest-pester: result: ", result)
+    logger.debug("neotest-pester: tree: ", tree)
+
     ---@type table<string, neotest.Result>
     local results = spec.context.results or {}
 
-    -- if not results then
-    --   for _, id in ipairs(vim.tbl_values(spec.context.projects_id_map)) do
-    --     results[id] = {
-    -- status = types.ResultStatus.skipped,
-    --       output = spec.context.result_path,
-    --       errors = {
-    --         { message = result.output },
-    --         { message = "failed to read result file" },
-    --       },
-    --     }
-    --   end
-    --   return results
-    -- end
+    spec.context.stop_stream()
+    local output_file = result.output
+    local success, data = pcall(lib.files.read, output_file)
 
-    logger.debug(results)
+    if not success then
+      logger.error("neotest-pester: No test output file found ", output_file)
+      return {}
+    end
+
+    logger.info("neotest-pester: file contents ", data)
+    -- delete all non-printable chars
+    local clean_json = data:match('%[{"[^%]]+%]')
+    logger.info("neotest-pester: clean file contents ", clean_json)
+
+    local ok, parsed = pcall(vim.json.decode, clean_json, { luanil = { object = true } })
+
+    if not ok then
+      logger.error("neotest-pester: Failed to parse test output json ", output_file)
+      return {}
+    end
+
+    logger.info("neotest-pester: parsed json: ", parsed)
+
+    for _, position in tree:iter() do
+      if position.type == "test" or position.type == "namespace" then
+        -- local outline_test_name = utils.get_test_name_from_outline(position, outline)
+        -- if outline_test_name then
+        local parts = vim.split(position.id, "::")
+        logger.debug("neotest-pester: position: ", position)
+        logger.debug("neotest-pester: split treesitter item: ", parts)
+        logger.debug("neotest-pester: last treesitter part item: ", parts[#parts])
+
+        local tree_test_name = parts[#parts]
+        local quote_trimmed_tree_test_name = tree_test_name:sub(2, #tree_test_name - 1)
+        for _, test_result in pairs(parsed) do
+          if quote_trimmed_tree_test_name == test_result.ExpandedName then
+            logger.debug(
+              "neotest-pester: yay we matched a tree test name to pester output result: ",
+              tree_test_name
+            )
+            local finalTestResult
+            if test_result.Result == "Passed" then
+              finalTestResult = types.ResultStatus.passed
+            elseif test_result.Result == "Failed" then
+              finalTestResult = types.ResultStatus.failed
+            elseif test_result.Result == "Skipped" then
+              finalTestResult = types.ResultStatus.skipped
+            end
+
+            results[position.id] = {
+              status = finalTestResult,
+            }
+          end
+        end
+      end
+    end
+
+    logger.debug("neotest-pester: final results: ", results)
 
     return results
   end
