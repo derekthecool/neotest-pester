@@ -1,9 +1,15 @@
 local new_set = MiniTest.new_set
 local expect, eq = MiniTest.expect, MiniTest.expect.equality
 
-local T = new_set()
-
 local config = require("neotest-pester.config")
+
+local T = new_set({
+  hooks = {
+    post_case = function()
+      config.reset()
+    end,
+  },
+})
 
 T["config.defaults.timeout_ms"] = function()
   eq(150000, config.get_config().timeout_ms)
@@ -13,23 +19,40 @@ T["config.defaults.pwsh_path"] = function()
   eq("pwsh", config.get_config().pwsh_path)
 end
 
-T["config.defaults.extra_args"] = function()
-  eq({}, config.get_config().extra_args)
+T["config.defaults.pester_configuration"] = function()
+  eq({}, config.get_config().pester_configuration)
 end
 
-T["config.override.pwsh_path"] = function()
-  vim.g.neotest_pester = { pwsh_path = "/usr/bin/pwsh" }
+T["config.defaults.dap_settings"] = function()
+  eq({}, config.get_config().dap_settings)
+end
+
+T["config.setup.pwsh_path"] = function()
+  config.setup({ pwsh_path = "/usr/bin/pwsh" })
   eq("/usr/bin/pwsh", config.get_config().pwsh_path)
-  vim.g.neotest_pester = nil
 end
 
-T["config.override.extra_args"] = function()
-  vim.g.neotest_pester = { extra_args = { "-Tag", "fast" } }
-  local cfg = config.get_config()
-  eq(2, #cfg.extra_args)
-  eq("-Tag", cfg.extra_args[1])
-  eq("fast", cfg.extra_args[2])
-  vim.g.neotest_pester = nil
+T["config.setup.pester_configuration"] = function()
+  config.setup({ pester_configuration = { Output = { Verbosity = "Diagnostic" } } })
+  eq("Diagnostic", config.get_config().pester_configuration.Output.Verbosity)
+end
+
+T["config.setup.dap_settings"] = function()
+  config.setup({ dap_settings = { type = "ps1", request = "attach" } })
+  eq("ps1", config.get_config().dap_settings.type)
+  eq("attach", config.get_config().dap_settings.request)
+end
+
+T["config.setup.preserves_defaults"] = function()
+  config.setup({ pwsh_path = "powershell" })
+  eq(150000, config.get_config().timeout_ms)
+end
+
+T["config.reset.restores_defaults"] = function()
+  config.setup({ pwsh_path = "custom", timeout_ms = 999 })
+  config.reset()
+  eq("pwsh", config.get_config().pwsh_path)
+  eq(150000, config.get_config().timeout_ms)
 end
 
 return T

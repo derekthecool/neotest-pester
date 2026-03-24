@@ -7,6 +7,10 @@ local plugin = require("neotest-pester")
 
 -- Helpers ────────────────────────────────────────────────────────────────────
 
+local function test_file_path()
+  return vim.fs.joinpath(vim.fn.getcwd(), "tests", "samples", "file.Tests.ps1")
+end
+
 local function write_results_file(data)
   local path = vim.fn.tempname() .. ".json"
   vim.fn.writefile({ data }, path)
@@ -46,10 +50,11 @@ end
 T["results.passed_test_maps_to_passed_status"] = function()
   local json = '[{"Result":"Passed","ExpandedName":"My test","ErrorMessage":null}]'
   local results_path = write_results_file(json)
+  local fp = test_file_path()
 
   local pos = {
     type = "test",
-    id = "/path/file.Tests.ps1::'MyDescribe'::'My test'",
+    id = fp .. "::'MyDescribe'::'My test'",
     range = { 5, 0, 7, 0 },
   }
   local results = plugin.results(make_spec(results_path), make_result(), mock_tree({ pos }))
@@ -61,10 +66,11 @@ end
 T["results.failed_test_maps_to_failed_status"] = function()
   local json = '[{"Result":"Failed","ExpandedName":"Broken test","ErrorMessage":"Expected 1 but got 2"}]'
   local results_path = write_results_file(json)
+  local fp = test_file_path()
 
   local pos = {
     type = "test",
-    id = "/path/file.Tests.ps1::'MyDescribe'::'Broken test'",
+    id = fp .. "::'MyDescribe'::'Broken test'",
     range = { 10, 0, 12, 0 },
   }
   local results = plugin.results(make_spec(results_path), make_result(), mock_tree({ pos }))
@@ -74,10 +80,11 @@ end
 T["results.failed_test_includes_error_message"] = function()
   local json = '[{"Result":"Failed","ExpandedName":"Broken test","ErrorMessage":"Expected 1 but got 2"}]'
   local results_path = write_results_file(json)
+  local fp = test_file_path()
 
   local pos = {
     type = "test",
-    id = "/path/file.Tests.ps1::'MyDescribe'::'Broken test'",
+    id = fp .. "::'MyDescribe'::'Broken test'",
     range = { 10, 0, 12, 0 },
   }
   local results = plugin.results(make_spec(results_path), make_result(), mock_tree({ pos }))
@@ -87,10 +94,11 @@ end
 T["results.failed_test_includes_errors_array"] = function()
   local json = '[{"Result":"Failed","ExpandedName":"Broken test","ErrorMessage":"Expected 1 but got 2"}]'
   local results_path = write_results_file(json)
+  local fp = test_file_path()
 
   local pos = {
     type = "test",
-    id = "/path/file.Tests.ps1::'MyDescribe'::'Broken test'",
+    id = fp .. "::'MyDescribe'::'Broken test'",
     range = { 10, 0, 12, 0 },
   }
   local results = plugin.results(make_spec(results_path), make_result(), mock_tree({ pos }))
@@ -104,10 +112,11 @@ end
 T["results.skipped_test_maps_to_skipped_status"] = function()
   local json = '[{"Result":"Skipped","ExpandedName":"Skipped test","ErrorMessage":null}]'
   local results_path = write_results_file(json)
+  local fp = test_file_path()
 
   local pos = {
     type = "test",
-    id = "/path/file.Tests.ps1::'MyDescribe'::'Skipped test'",
+    id = fp .. "::'MyDescribe'::'Skipped test'",
     range = { 15, 0, 17, 0 },
   }
   local results = plugin.results(make_spec(results_path), make_result(), mock_tree({ pos }))
@@ -119,10 +128,11 @@ end
 T["results.passed_test_has_no_error_message"] = function()
   local json = '[{"Result":"Passed","ExpandedName":"Good test","ErrorMessage":null}]'
   local results_path = write_results_file(json)
+  local fp = test_file_path()
 
   local pos = {
     type = "test",
-    id = "/path/file.Tests.ps1::'MyDescribe'::'Good test'",
+    id = fp .. "::'MyDescribe'::'Good test'",
     range = { 1, 0, 3, 0 },
   }
   local results = plugin.results(make_spec(results_path), make_result(), mock_tree({ pos }))
@@ -133,7 +143,8 @@ end
 -- ── missing results file ─────────────────────────────────────────────────────
 
 T["results.missing_results_file_returns_empty"] = function()
-  local spec = make_spec("/nonexistent/path/results.json")
+  local nonexistent = vim.fs.joinpath(vim.fn.tempname(), "nonexistent", "results.json")
+  local spec = make_spec(nonexistent)
   local results = plugin.results(spec, make_result(), mock_tree({}))
   eq("table", type(results))
   eq(0, #vim.tbl_keys(results))

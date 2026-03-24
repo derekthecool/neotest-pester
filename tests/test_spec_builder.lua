@@ -6,111 +6,227 @@ local T = new_set()
 local builder = require("neotest-pester.spec_builder")
 
 local function default_config()
-  return { pwsh_path = "pwsh", extra_args = {} }
+  return { pwsh_path = "pwsh", pester_configuration = {} }
 end
 
--- ── file position ────────────────────────────────────────────────────────────
-
-T["build_script.file.contains_path_arg"] = function()
-  local pos = { type = "file", path = "C:/code/MyModule.Tests.ps1", id = "C:/code/MyModule.Tests.ps1" }
-  local script = builder.build_script(pos, "C:/tmp/results.json", default_config())
-  MiniTest.expect.no_error(function()
-    assert(script:find("-Path 'C:/code/MyModule.Tests.ps1'"), "expected -Path arg in script")
-  end)
+local function test_path(name)
+  return vim.fs.joinpath(vim.fn.getcwd(), name or "MyModule.Tests.ps1")
 end
 
-T["build_script.file.no_fullname_filter"] = function()
-  local pos = { type = "file", path = "C:/code/MyModule.Tests.ps1", id = "C:/code/MyModule.Tests.ps1" }
-  local script = builder.build_script(pos, "C:/tmp/results.json", default_config())
-  MiniTest.expect.no_error(function()
-    assert(not script:find("-FullNameFilter"), "file position should not have -FullNameFilter")
-  end)
+local function test_results_path()
+  return vim.fn.tempname() .. ".json"
 end
 
-T["build_script.file.writes_to_results_path"] = function()
-  local pos = { type = "file", path = "C:/code/MyModule.Tests.ps1", id = "C:/code/MyModule.Tests.ps1" }
-  local script = builder.build_script(pos, "C:/tmp/results.json", default_config())
-  MiniTest.expect.no_error(function()
-    assert(script:find("Set%-Content %-Path 'C:/tmp/results%.json'"), "expected Set-Content with results path")
-  end)
+-- ── strip_quotes ─────────────────────────────────────────────────────────────
+
+T["strip_quotes.removes_single_quotes"] = function()
+  eq("hello", builder.strip_quotes("'hello'"))
 end
 
--- ── namespace (Describe) position ────────────────────────────────────────────
+T["strip_quotes.removes_double_quotes"] = function()
+  eq("hello", builder.strip_quotes('"hello"'))
+end
 
-T["build_script.namespace.has_wildcard_filter"] = function()
+T["strip_quotes.no_quotes_unchanged"] = function()
+  eq("hello", builder.strip_quotes("hello"))
+end
+
+T["strip_quotes.mismatched_quotes_unchanged"] = function()
+  eq("'hello\"", builder.strip_quotes("'hello\""))
+end
+
+-- ── extract_name_parts ───────────────────────────────────────────────────────
+
+T["extract_name_parts.simple"] = function()
+  local parts = builder.extract_name_parts("path::Describe::It")
+  eq(2, #parts)
+  eq("Describe", parts[1])
+  eq("It", parts[2])
+end
+
+T["extract_name_parts.with_quotes"] = function()
+  local parts = builder.extract_name_parts("path::'Describe'::'It name'")
+  eq(2, #parts)
+  eq("Describe", parts[1])
+  eq("It name", parts[2])
+end
+
+T["extract_name_parts.nested"] = function()
+  local parts = builder.extract_name_parts("path::Outer::Inner::Test")
+  eq(3, #parts)
+  eq("Outer", parts[1])
+  eq("Inner", parts[2])
+  eq("Test", parts[3])
+end
+
+-- ── build_pester_config: file position ───────────────────────────────────────
+
+T["build_pester_config.file.has_path"] = function()
+  local p = test_path()
+  local pos = { type = "file", path = p, id = p }
+  local cfg = builder.build_pester_config(pos, default_config())
+  eq({ p }, cfg.Run.Path)
+end
+
+T["build_pester_config.file.has_passthru"] = function()
+  local p = test_path()
+  local pos = { type = "file", path = p, id = p }
+  local cfg = builder.build_pester_config(pos, default_config())
+  eq(true, cfg.Run.PassThru)
+end
+
+T["build_pester_config.file.no_filter"] = function()
+  local p = test_path()
+  local pos = { type = "file", path = p, id = p }
+  local cfg = builder.build_pester_config(pos, default_config())
+  eq(nil, cfg.Filter)
+end
+
+-- ── build_pester_config: namespace position ──────────────────────────────────
+
+T["build_pester_config.namespace.has_wildcard_filter"] = function()
+  local p = test_path()
   local pos = {
     type = "namespace",
-    path = "C:/code/MyModule.Tests.ps1",
-    id = "C:/code/MyModule.Tests.ps1::'Format-Pairs'::'unused'",
+    path = p,
+    id = p .. "::Format-Pairs",
   }
-  local script = builder.build_script(pos, "C:/tmp/results.json", default_config())
-  MiniTest.expect.no_error(function()
-    assert(
-      script:find("-FullNameFilter 'Format%-Pairs%*'"),
-      "namespace position should have wildcard FullNameFilter, got: " .. script
-    )
-  end)
+  local cfg = builder.build_pester_config(pos, default_config())
+  eq({ "Format-Pairs*" }, cfg.Filter.FullName)
 end
 
--- ── test (It) position ───────────────────────────────────────────────────────
+T["build_pester_config.namespace.quoted_id"] = function()
+  local p = test_path()
+  local pos = {
+    type = "namespace",
+    path = p,
+    id = p .. "::'Format-Pairs'",
+  }
+  local cfg = builder.build_pester_config(pos, default_config())
+  eq({ "Format-Pairs*" }, cfg.Filter.FullName)
+end
 
-T["build_script.test.has_exact_filter"] = function()
+-- ── build_pester_config: test position ───────────────────────────────────────
+
+T["build_pester_config.test.has_exact_filter"] = function()
+  local p = test_path()
   local pos = {
     type = "test",
-    path = "C:/code/MyModule.Tests.ps1",
-    id = "C:/code/MyModule.Tests.ps1::'Format-Pairs'::'Function exists'",
+    path = p,
+    id = p .. "::Format-Pairs::Function exists",
   }
-  local script = builder.build_script(pos, "C:/tmp/results.json", default_config())
+  local cfg = builder.build_pester_config(pos, default_config())
+  eq({ "Format-Pairs.Function exists" }, cfg.Filter.FullName)
+end
+
+T["build_pester_config.test.quoted_id"] = function()
+  local p = test_path()
+  local pos = {
+    type = "test",
+    path = p,
+    id = p .. "::'Format-Pairs'::'Function exists'",
+  }
+  local cfg = builder.build_pester_config(pos, default_config())
+  eq({ "Format-Pairs.Function exists" }, cfg.Filter.FullName)
+end
+
+T["build_pester_config.test.nested_describes"] = function()
+  local p = test_path()
+  local pos = {
+    type = "test",
+    path = p,
+    id = p .. "::Outer::Inner::My test",
+  }
+  local cfg = builder.build_pester_config(pos, default_config())
+  eq({ "Outer.Inner.My test" }, cfg.Filter.FullName)
+end
+
+-- ── build_pester_config: pester_configuration merging ────────────────────────
+
+T["build_pester_config.merges_overrides"] = function()
+  local p = test_path()
+  local pos = { type = "file", path = p, id = p }
+  local cfg_opts = { pwsh_path = "pwsh", pester_configuration = { Output = { Verbosity = "Diagnostic" } } }
+  local cfg = builder.build_pester_config(pos, cfg_opts)
+  eq("Diagnostic", cfg.Output.Verbosity)
+end
+
+T["build_pester_config.overrides_dont_clobber_run"] = function()
+  local p = test_path()
+  local pos = { type = "file", path = p, id = p }
+  local cfg_opts = { pwsh_path = "pwsh", pester_configuration = { Output = { Verbosity = "Diagnostic" } } }
+  local cfg = builder.build_pester_config(pos, cfg_opts)
+  eq(true, cfg.Run.PassThru)
+end
+
+-- ── build_script: output format ──────────────────────────────────────────────
+
+T["build_script.uses_convertfrom_json"] = function()
+  local p = test_path()
+  local pos = { type = "file", path = p, id = p }
+  local script = builder.build_script(pos, test_results_path(), default_config())
   MiniTest.expect.no_error(function()
-    assert(
-      script:find("-FullNameFilter 'Format%-Pairs Function exists'"),
-      "test position should have exact FullNameFilter, got: " .. script
-    )
+    assert(script:find("ConvertFrom%-Json"), "should use ConvertFrom-Json")
   end)
 end
 
--- ── extra_args ───────────────────────────────────────────────────────────────
-
-T["build_script.extra_args.appended_before_passthru"] = function()
-  local pos = { type = "file", path = "C:/code/MyModule.Tests.ps1", id = "C:/code/MyModule.Tests.ps1" }
-  local cfg = { pwsh_path = "pwsh", extra_args = { "-Tag", "fast" } }
-  local script = builder.build_script(pos, "C:/tmp/results.json", cfg)
+T["build_script.uses_new_pester_configuration"] = function()
+  local p = test_path()
+  local pos = { type = "file", path = p, id = p }
+  local script = builder.build_script(pos, test_results_path(), default_config())
   MiniTest.expect.no_error(function()
-    assert(script:find("%-Tag fast"), "extra_args should appear in script, got: " .. script)
-  end)
-  MiniTest.expect.no_error(function()
-    -- -PassThru must come after extra_args
-    local tag_pos = script:find("%-Tag fast")
-    local pt_pos = script:find("%-PassThru")
-    assert(tag_pos < pt_pos, "-PassThru should appear after extra_args")
+    assert(script:find("New%-PesterConfiguration"), "should use New-PesterConfiguration")
   end)
 end
 
-T["build_script.extra_args.empty_no_extra_spaces"] = function()
-  local pos = { type = "file", path = "C:/code/Test.Tests.ps1", id = "C:/code/Test.Tests.ps1" }
-  local script = builder.build_script(pos, "C:/tmp/r.json", default_config())
+T["build_script.writes_to_results_path"] = function()
+  local p = test_path()
+  local rp = test_results_path()
+  local pos = { type = "file", path = p, id = p }
+  local script = builder.build_script(pos, rp, default_config())
   MiniTest.expect.no_error(function()
-    -- Should not have consecutive spaces from an empty extra_args
-    assert(not script:find("  "), "script should not have consecutive spaces, got: " .. script)
+    -- Escape the results path for Lua pattern matching
+    local escaped_rp = rp:gsub("([%.%-%+%(%)%[%]%$%^%%])", "%%%1")
+    assert(script:find("Set%-Content %-Path '" .. escaped_rp .. "'"), "should write to results path")
   end)
 end
 
--- ── output fields ────────────────────────────────────────────────────────────
-
-T["build_script.output.includes_error_message_field"] = function()
-  local pos = { type = "file", path = "C:/code/Test.Tests.ps1", id = "C:/code/Test.Tests.ps1" }
-  local script = builder.build_script(pos, "C:/tmp/r.json", default_config())
+T["build_script.includes_error_message_field"] = function()
+  local p = test_path()
+  local pos = { type = "file", path = p, id = p }
+  local script = builder.build_script(pos, test_results_path(), default_config())
   MiniTest.expect.no_error(function()
-    assert(script:find("ErrorMessage"), "script should select ErrorMessage field")
+    assert(script:find("ErrorMessage"), "should include ErrorMessage field")
   end)
 end
 
-T["build_script.output.includes_result_and_expandedname"] = function()
-  local pos = { type = "file", path = "C:/code/Test.Tests.ps1", id = "C:/code/Test.Tests.ps1" }
-  local script = builder.build_script(pos, "C:/tmp/r.json", default_config())
+T["build_script.includes_result_and_expandedname"] = function()
+  local p = test_path()
+  local pos = { type = "file", path = p, id = p }
+  local script = builder.build_script(pos, test_results_path(), default_config())
   MiniTest.expect.no_error(function()
-    assert(script:find("Result"), "script should select Result field")
-    assert(script:find("ExpandedName"), "script should select ExpandedName field")
+    assert(script:find("Result"), "should include Result field")
+    assert(script:find("ExpandedName"), "should include ExpandedName field")
+  end)
+end
+
+-- ── build_dap_script ─────────────────────────────────────────────────────────
+
+T["build_dap_script.is_multi_line"] = function()
+  local p = test_path()
+  local pos = { type = "file", path = p, id = p }
+  local script = builder.build_dap_script(pos, test_results_path(), default_config())
+  MiniTest.expect.no_error(function()
+    assert(script:find("\n"), "DAP script should be multi-line")
+  end)
+end
+
+T["build_dap_script.uses_new_pester_configuration"] = function()
+  local p = test_path()
+  local pos = { type = "file", path = p, id = p }
+  local script = builder.build_dap_script(pos, test_results_path(), default_config())
+  MiniTest.expect.no_error(function()
+    assert(script:find("New%-PesterConfiguration"), "should use New-PesterConfiguration")
   end)
 end
 
