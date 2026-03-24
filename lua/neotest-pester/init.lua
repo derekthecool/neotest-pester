@@ -489,70 +489,28 @@ local function create_adapter()
   ---@return nil | neotest.RunSpec | neotest.RunSpec[]
   function PesterNeotestAdapter.build_spec(args)
     local nio = require("nio")
-    local lib = require("neotest.lib")
     local logger = require("neotest.logging")
+    local spec_builder = require("neotest-pester.spec_builder")
+    local config_mod = require("neotest-pester.config")
 
     local tree = args.tree
     if not tree then
       return
     end
 
+    local cfg = config_mod.get_config()
+    local position = tree:data()
     local results_path = nio.fn.tempname()
-    local stream_path = nio.fn.tempname()
-    lib.files.write(stream_path, "")
 
-    local stream_data, stop_stream = lib.files.stream_lines(stream_path)
-
-    local command = {}
-    local pester_command =
-      "pwsh -NoProfile -Command $T=Invoke-Pester -PassThru 3>$null 6>$null; $T.tests | Sort-Object ExpandedName -Unique | Select-Object Result, ExpandedName | ConvertTo-Json -Compress"
-    for item in pester_command:gmatch("%S+") do
-      table.insert(command, item)
-    end
+    local ps_script = spec_builder.build_script(position, results_path, cfg)
+    logger.debug("neotest-pester: ps_script: ", ps_script)
 
     return {
-      command = command,
+      command = { cfg.pwsh_path, "-NoProfile", "-Command", ps_script },
       context = {
-        results = {},
         results_path = results_path,
-        stop_stream = stop_stream,
+        stop_stream = function() end,
       },
-      stream = function()
-        logger.info("neotest-pester: stream wrapper function called")
-        return function()
-          local lines = stream_data()
-          if not lines or #lines == 0 then
-            logger.info("neotest-pester: stream processor lines was nil or 0 lines")
-            return {}
-          end
-
-          logger.debug("Received stream lines:", lines)
-
-          local results = {}
-
-          -- Combine all lines (in case JSON is split across lines)
-          local json_text = table.concat(lines, "")
-
-          -- Decode the JSON
-          local ok, decoded = pcall(vim.json.decode, json_text, { luanil = { object = true } })
-          if ok and type(decoded) == "table" then
-            for _, item in ipairs(decoded) do
-              if item.ExpandedName and item.Result then
-                results[item.ExpandedName] = {
-                  status = item.Result == "Passed" and "passed"
-                    or item.Result == "Failed" and "failed"
-                    or "skipped",
-                }
-              end
-            end
-          else
-            logger.error("Failed to decode JSON:", json_text)
-          end
-
-          logger.info("neotest-pester: processed " .. vim.inspect(results))
-          return results
-        end
-      end,
     }
   end
 
@@ -565,7 +523,6 @@ local function create_adapter()
   function PesterNeotestAdapter.results(spec, result, tree)
     local types = require("neotest.types")
     local logger = require("neotest.logging")
-    local lib = require("neotest.lib")
 
     logger.info("neotest-pester: waiting for test results")
     logger.debug("neotest-pester: spec: ", spec)
@@ -573,26 +530,27 @@ local function create_adapter()
     logger.debug("neotest-pester: tree: ", tree)
 
     ---@type table<string, neotest.Result>
-    local results = spec.context.results or {}
+    local results = {}
 
     spec.context.stop_stream()
-    local output_file = result.output
-    local success, data = pcall(lib.files.read, output_file)
 
-    if not success then
-      logger.error("neotest-pester: No test output file found ", output_file)
+    -- Read structured JSON results from the dedicated temp file (not stdout).
+    -- Uses io.open (synchronous) so this works regardless of async context.
+    local results_path = spec.context.results_path
+    local f = io.open(results_path, "r")
+    if not f then
+      logger.error("neotest-pester: No results file found at ", results_path)
       return {}
     end
+    local data = f:read("*a")
+    f:close()
 
-    logger.info("neotest-pester: file contents ", data)
-    -- delete all non-printable chars
-    local clean_json = data:match('%[{"[^%]]+%]')
-    logger.info("neotest-pester: clean file contents ", clean_json)
+    logger.info("neotest-pester: results file contents ", data)
 
-    local ok, parsed = pcall(vim.json.decode, clean_json, { luanil = { object = true } })
+    local ok, parsed = pcall(vim.json.decode, data, { luanil = { object = true } })
 
-    if not ok then
-      logger.error("neotest-pester: Failed to parse test output json ", output_file)
+    if not ok or type(parsed) ~= "table" then
+      logger.error("neotest-pester: Failed to parse results JSON from ", results_path)
       return {}
     end
 
@@ -600,21 +558,16 @@ local function create_adapter()
 
     for _, position in tree:iter() do
       if position.type == "test" or position.type == "namespace" then
-        -- local outline_test_name = utils.get_test_name_from_outline(position, outline)
-        -- if outline_test_name then
         local parts = vim.split(position.id, "::")
         logger.debug("neotest-pester: position: ", position)
-        logger.debug("neotest-pester: split treesitter item: ", parts)
-        logger.debug("neotest-pester: last treesitter part item: ", parts[#parts])
 
         local tree_test_name = parts[#parts]
         local quote_trimmed_tree_test_name = tree_test_name:sub(2, #tree_test_name - 1)
+
         for _, test_result in pairs(parsed) do
           if quote_trimmed_tree_test_name == test_result.ExpandedName then
-            logger.debug(
-              "neotest-pester: yay we matched a tree test name to pester output result: ",
-              tree_test_name
-            )
+            logger.debug("neotest-pester: matched tree test name: ", tree_test_name)
+
             local finalTestResult
             if test_result.Result == "Passed" then
               finalTestResult = types.ResultStatus.passed
@@ -624,8 +577,14 @@ local function create_adapter()
               finalTestResult = types.ResultStatus.skipped
             end
 
+            local err_msg = test_result.ErrorMessage
             results[position.id] = {
               status = finalTestResult,
+              short = err_msg or nil,
+              errors = err_msg
+                  and { { message = err_msg, line = position.range and position.range[1] } }
+                or nil,
+              output = result.output,
             }
           end
         end

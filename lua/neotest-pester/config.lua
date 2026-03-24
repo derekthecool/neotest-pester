@@ -1,17 +1,15 @@
 local M = {}
 
 ---@class neotest-pester.Config
----@field sdk_path? string path to dotnet sdk. Example: /usr/local/share/dotnet/sdk/9.0.101/
----@field build_opts? BuildOpts
----@field dap_settings? dap.Configuration dap settings for debugging
----@field discovery_directory_filter? fun(project_dir: string): boolean function to filter directories during initialization discovery. Return true to ignore the directory.
----@field solution_selector? fun(solutions: string[]): string|nil
----@field settings_selector? fun(project_dir: string): string|nil function to find the .runsettings/testconfig.json in the project dir
+---@field pwsh_path? string path to pwsh executable, e.g. "pwsh", "powershell", or a full path. Default: "pwsh"
+---@field extra_args? string[] extra arguments passed directly to Invoke-Pester
 ---@field timeout_ms? number milliseconds to wait before timing out connection with test runner
 
 ---@type neotest-pester.Config
 local default_config = {
   timeout_ms = 5 * 30 * 1000,
+  pwsh_path = "pwsh",
+  extra_args = {},
 }
 
 ---@return neotest-pester.Config
