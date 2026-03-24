@@ -7,6 +7,7 @@ local config = require("neotest-pester.config")
 local PesterNeotestAdapter = { name = "neotest-pester" }
 
 ---Find the project root directory by walking up to find .git.
+---Uses neotest's match_root_pattern to ensure path format matches neotest's internal tree.
 ---@async
 ---@param dir string @Directory to treat as cwd
 ---@return string | nil @Absolute root dir of test suite
@@ -14,11 +15,8 @@ function PesterNeotestAdapter.root(dir)
   if not dir then
     return nil
   end
-  local found = vim.fs.find(".git", { path = dir, upward = true, type = "directory" })
-  if #found > 0 then
-    return vim.fs.dirname(found[1])
-  end
-  return dir
+  local lib = require("neotest.lib")
+  return lib.files.match_root_pattern(".git")(dir) or dir
 end
 
 ---Filter directories when searching for test files.
