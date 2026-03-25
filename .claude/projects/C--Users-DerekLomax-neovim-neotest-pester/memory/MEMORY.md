@@ -1,0 +1,1 @@
+- [feedback_no_hardcoded_paths.md](feedback_no_hardcoded_paths.md) — Never hardcode Windows-style paths; always cross-platform

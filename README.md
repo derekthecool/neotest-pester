@@ -21,7 +21,7 @@ Using [lazy.nvim](https://github.com/folke/lazy.nvim):
     "nvim-neotest/nvim-nio",
     "nvim-lua/plenary.nvim",
     "nvim-treesitter/nvim-treesitter",
-    "DerekLomax/neotest-pester",
+    "derekthecool/neotest-pester",
   },
   config = function()
     require("neotest").setup({
@@ -73,12 +73,12 @@ require("neotest").setup({
 
 ### Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `pwsh_path` | `string` | `"pwsh"` | Path to PowerShell executable. Use `"powershell"` for Windows PowerShell 5.1. |
-| `pester_configuration` | `table` | `{}` | PesterConfiguration overrides merged into the generated config. Maps to `New-PesterConfiguration` fields. |
-| `dap_settings` | `table` | `{}` | DAP configuration for debug test runs. Merged into the default strategy config. |
-| `timeout_ms` | `number` | `150000` | Milliseconds before timing out a test run. |
+| Option                 | Type     | Default  | Description                                                                                               |
+| ---------------------- | -------- | -------- | --------------------------------------------------------------------------------------------------------- |
+| `pwsh_path`            | `string` | `"pwsh"` | Path to PowerShell executable. Use `"powershell"` for Windows PowerShell 5.1.                             |
+| `pester_configuration` | `table`  | `{}`     | PesterConfiguration overrides merged into the generated config. Maps to `New-PesterConfiguration` fields. |
+| `dap_settings`         | `table`  | `{}`     | DAP configuration for debug test runs. Merged into the default strategy config.                           |
+| `timeout_ms`           | `number` | `150000` | Milliseconds before timing out a test run.                                                                |
 
 ## Usage
 
