@@ -46,27 +46,31 @@ Pass options to `.setup()` to override defaults:
 ```lua
 require("neotest").setup({
   adapters = {
-    require("neotest-pester").setup({
-      -- Path to pwsh executable (default: "pwsh")
-      pwsh_path = "pwsh",
+    require("neotest-pester").setup(
+      ---@type neotest-pester.Config
+      {
+        -- Path to pwsh executable (default: "pwsh")
+        pwsh_path = "pwsh",
 
-      -- PesterConfiguration overrides (merged into generated config)
-      -- These map directly to Pester 5's New-PesterConfiguration fields.
-      -- See: https://pester.dev/docs/usage/configuration
-      pester_configuration = {
-        Output = { Verbosity = "Detailed" },
-        Filter = { Tag = { "Unit" } },
-      },
+        -- PesterConfiguration overrides (merged into generated config)
+        -- These map directly to Pester 5's New-PesterConfiguration fields.
+        -- See: https://pester.dev/docs/usage/configuration
+        ---@type PesterConfiguration
+        pester_configuration = {
+          Output = { Verbosity = "Detailed" },
+          Filter = { Tag = { "Unit" } },
+        },
 
-      -- DAP debug settings (for running tests with :lua require("neotest").run.run({strategy = "dap"}))
-      dap_settings = {
-        type = "ps1",       -- DAP adapter type
-        request = "launch", -- DAP request type
-      },
+        -- DAP debug settings (for running tests with :lua require("neotest").run.run({strategy = "dap"}))
+        dap_settings = {
+          type = "ps1",       -- DAP adapter type
+          request = "launch", -- DAP request type
+        },
 
-      -- Timeout in milliseconds (default: 150000)
-      timeout_ms = 150000,
-    }),
+        -- Timeout in milliseconds (default: 150000)
+        timeout_ms = 150000,
+      }
+    ),
   },
 })
 ```
